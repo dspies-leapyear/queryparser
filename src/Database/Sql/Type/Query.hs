@@ -141,18 +141,20 @@ deriving instance ConstrainSASNames Functor r => Functor (SelectFrom r)
 deriving instance ConstrainSASNames Foldable r => Foldable (SelectFrom r)
 deriving instance ConstrainSASNames Traversable r => Traversable (SelectFrom r)
 
-
-data TablishAliases a
+data OptionalTablishAliases a
     = TablishAliasesNone
     | TablishAliasesT (TableAlias a)
     | TablishAliasesTC (TableAlias a) [ColumnAlias a]
       deriving (Generic, Data, Eq, Ord, Show, Functor, Foldable, Traversable)
 
+data RTablishAliases a
+    = RTablishAliases (Maybe (TableAlias a)) [ColumnAlias a]
+      deriving (Generic, Data, Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- Tablish is a Table, Query, or join of 2 Tablishs
 data Tablish r a
-    = TablishTable a (TablishAliases a) (TableRef r a)
-    | TablishSubQuery a (TablishAliases a) (Query r a)
+    = TablishTable a (OptionalTablishAliases a) (TableRef r a)
+    | TablishSubQuery a (OptionalTablishAliases a) (Query r a)
     | TablishJoin a (JoinType a) (JoinCondition r a)
             (Tablish r a) (Tablish r a)
     | TablishLateralView a (LateralView r a) (Maybe (Tablish r a))
@@ -195,7 +197,7 @@ data LateralView r a = LateralView
     , lateralViewOuter :: Maybe a
     , lateralViewExprs :: [Expr r a]
     , lateralViewWithOrdinality :: Bool
-    , lateralViewAliases :: TablishAliases a
+    , lateralViewAliases :: OptionalTablishAliases a
     }
 
 deriving instance (ConstrainSNames Data r a, Data r) => Data (LateralView r a)
@@ -1197,7 +1199,7 @@ instance ConstrainSNames ToJSON r a => ToJSON (JoinCondition r a) where
         ]
 
 
-instance ToJSON a => ToJSON (TablishAliases a) where
+instance ToJSON a => ToJSON (OptionalTablishAliases a) where
     toJSON (TablishAliasesNone) = object
         [ "tag" .= String "TablishAliasesNone"
         ]
@@ -1207,6 +1209,13 @@ instance ToJSON a => ToJSON (TablishAliases a) where
         ]
     toJSON (TablishAliasesTC table columns) = object
         [ "tag" .= String "TablishAliasesTC"
+        , "table" .= table
+        , "columns" .= columns
+        ]
+
+instance ToJSON a => ToJSON (RTablishAliases a) where
+    toJSON (RTablishAliases table columns) = object
+        [ "tag" .= String "RTablishAliases"
         , "table" .= table
         , "columns" .= columns
         ]
@@ -1880,15 +1889,25 @@ instance ConstrainSNames FromJSON r a => FromJSON (JoinCondition r a) where
         ]
 
 
-instance FromJSON a => FromJSON (TablishAliases a) where
+instance FromJSON a => FromJSON (OptionalTablishAliases a) where
     parseJSON (Object o) = o .: "tag" >>= \case
         String "TablishAliasesNone" -> return TablishAliasesNone
         String "TablishAliasesT" -> TablishAliasesT <$> o .: "table"
         String "TablishAliasesTC" -> TablishAliasesTC <$> o .: "table" <*> o .: "columns"
-        _ -> fail "unrecognized tag on TablishAliases object"
+        _ -> fail "unrecognized tag on OptionalTablishAliases object"
 
     parseJSON v = fail $ unwords
-        [ "don't know how to parse as TablishAliases:"
+        [ "don't know how to parse as OptionalTablishAliases:"
+        , show v
+        ]
+
+instance FromJSON a => FromJSON (RTablishAliases a) where
+    parseJSON (Object o) = o .: "tag" >>= \case
+        String "RTablishAliases" -> RTablishAliases <$> o .: "table" <*> o .: "columns"
+        _ -> fail "unrecognized tag on RTablishAliases object"
+
+    parseJSON v = fail $ unwords
+        [ "don't know how to parse as RTablishAliases:"
         , show v
         ]
 

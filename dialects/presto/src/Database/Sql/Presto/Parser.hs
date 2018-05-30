@@ -373,7 +373,7 @@ sampledRelationP = do
                 TablishLateralView info LateralView{..} lhs -> TablishLateralView info LateralView{lateralViewAliases = as, ..} lhs
         return withAliases
 
-    tablishAliasesP :: Parser (TablishAliases Range)
+    tablishAliasesP :: Parser (OptionalTablishAliases Range)
     tablishAliasesP = do
         option TablishAliasesNone $ try $ do
             -- the try is because TABLESAMPLE may either be a table alias OR
