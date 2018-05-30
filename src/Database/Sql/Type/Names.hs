@@ -69,6 +69,8 @@ type ConstrainSNames (c :: * -> Constraint) r a =
     , c (NaturalColumns r a)
     , c (UsingColumn r a)
     , c (StarReferents r a)
+    , c (ITablishAliases r a)
+    , c (OTablishAliases r a)
     , c (PositionExpr r a)
     , c (ComposedQueryColumns r a)
     )
@@ -84,6 +86,8 @@ type ConstrainSASNames (c :: (* -> *) -> Constraint) r =
     , c (NaturalColumns r)
     , c (UsingColumn r)
     , c (StarReferents r)
+    , c (ITablishAliases r)
+    , c (OTablishAliases r)
     , c (PositionExpr r)
     , c (ComposedQueryColumns r)
     )
@@ -124,6 +128,14 @@ class Resolution r where
     type UsingColumn r :: * -> *
 
     type StarReferents r :: * -> *
+
+    -- | OTablishAliases - Optional aliases decorating a Tablish
+    type OTablishAliases r :: * -> *
+
+    -- | ITablishAliases - Implied aliases decorating a Tablish
+    --
+    -- Used where there's no space for adding aliases explicitly
+    type ITablishAliases r :: * -> *
 
     type PositionExpr r :: * -> *
 

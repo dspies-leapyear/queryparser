@@ -133,6 +133,8 @@ instance Resolution RawNames where
     type NaturalColumns RawNames = Unused
     type UsingColumn RawNames = UQColumnName
     type StarReferents RawNames = Unused
+    type OTablishAliases RawNames = OptionalTablishAliases
+    type ITablishAliases RawNames = Unused
     type PositionExpr RawNames = Unused
     type ComposedQueryColumns RawNames = Unused
 
@@ -155,6 +157,8 @@ instance Resolution ResolvedNames where
     type NaturalColumns ResolvedNames = RNaturalColumns
     type UsingColumn ResolvedNames = RUsingColumn
     type StarReferents ResolvedNames = StarColumnNames
+    type OTablishAliases ResolvedNames = RTablishAliases
+    type ITablishAliases ResolvedNames = RTablishAliases
     type PositionExpr ResolvedNames = Expr ResolvedNames
     type ComposedQueryColumns ResolvedNames = ColumnAliasList
 

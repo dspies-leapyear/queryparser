@@ -307,7 +307,7 @@ decomposeMerge Merge{..} = fromList $ catMaybes [ fmap mkInsert mergeInsertDirec
     r :: a
     r = mergeInfo
 
-    toAliases :: Maybe (TableAlias a) -> TablishAliases a
+    toAliases :: Maybe (TableAlias a) -> OptionalTablishAliases a
     toAliases mAlias = case mAlias of
         Just alias -> TablishAliasesT alias
         Nothing -> TablishAliasesNone
