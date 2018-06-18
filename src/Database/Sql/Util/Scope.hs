@@ -700,7 +700,7 @@ resolveTablish (TablishJoin info joinType cond lhs rhs) = do
     -- special case for Presto
     lcolumnsAreVisible <- asks lcolumnsAreVisibleInLateralViews
     let bindForRhs = case (lcolumnsAreVisible, rhs) of
-          (True, TablishLateralView _ _ _) -> bindColumns lcolumns
+          (True, TablishLateralView{}) -> bindColumns lcolumns
           _ -> id
 
     WithColumns rhs' rcolumns <- bindForRhs $ resolveTablish rhs
@@ -712,7 +712,7 @@ resolveTablish (TablishJoin info joinType cond lhs rhs) = do
         cond' <- resolveJoinCondition cond lcolumns rcolumns
         pure $ WithColumns (TablishJoin info joinType cond' lhs' rhs') $ colsForRestOfQuery
 
-resolveTablish (TablishLateralView info LateralView{..} lhs) = do
+resolveTablish (TablishLateralView info aliases LateralView{..} lhs) = do
     (lhs', lcolumns) <- case lhs of
         Nothing -> return (Nothing, [])
         Just tablish -> do
@@ -727,12 +727,12 @@ resolveTablish (TablishLateralView info LateralView{..} lhs) = do
                 }
 
         defaultCols <- map RColumnAlias . concat <$> mapM defaultAliases lateralViewExprs'
-        let rcolumns = case lateralViewAliases of
+        let rcolumns = case aliases of
                 TablishAliasesNone -> [(Nothing, defaultCols)]
                 TablishAliasesT t -> [(Just $ RTableAlias t, defaultCols)]
                 TablishAliasesTC t cs -> [(Just $ RTableAlias t, map RColumnAlias cs)]
 
-        pure $ WithColumns (TablishLateralView info view lhs') $ lcolumns ++ rcolumns
+        pure $ WithColumns (TablishLateralView info aliases view lhs') $ lcolumns ++ rcolumns
   where
     defaultAliases (FunctionExpr r (QFunctionName _ _ rawName) _ args _ _ _) = do
         let argsLessOne = (length args) - 1

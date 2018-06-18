@@ -343,7 +343,7 @@ getJoinsOrder (Order _ posOrExpr _ _) = void $ getJoinsPositionOrExpr posOrExpr
 
 getJoinsTablish :: Tablish ResolvedNames a -> Scoped ()
 getJoinsTablish (TablishTable _ _ _) = pure ()
-getJoinsTablish (TablishLateralView _ LateralView{..} lhs) = do
+getJoinsTablish (TablishLateralView _ _ LateralView{..} lhs) = do
     maybe (pure ()) getJoinsTablish lhs
     mapM_ getJoinsExpr lateralViewExprs
 

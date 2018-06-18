@@ -352,7 +352,7 @@ instance HasInfo (Tablish r a) where
     getInfo (TablishTable info _ _) = info
     getInfo (TablishSubQuery info _ _) = info
     getInfo (TablishJoin info _ _ _ _) = info
-    getInfo (TablishLateralView info _ _) = info
+    getInfo (TablishLateralView info _ _ _) = info
 
 
 instance HasInfo (Selection r a) where
