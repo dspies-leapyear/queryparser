@@ -270,7 +270,7 @@ instance HasTables (Tablish ResolvedNames a) where
     goTables (TablishTable _ _ (RTableRef fqtn _)) = emitTable fqtn
     goTables (TablishTable _ _ (RTableAlias _)) = return ()
     goTables (TablishSubQuery _ _ query) = goTables query
-    goTables (TablishLateralView _ LateralView{..} lhs) = goTables lhs >> mapM_ goTables lateralViewExprs
+    goTables (TablishLateralView _ _ LateralView{..} lhs) = goTables lhs >> mapM_ goTables lateralViewExprs
     goTables (TablishJoin _ _ cond outer inner) = do
         case cond of
             JoinOn expr -> goTables expr

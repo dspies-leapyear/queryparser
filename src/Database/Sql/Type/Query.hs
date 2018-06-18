@@ -157,7 +157,7 @@ data Tablish r a
     | TablishSubQuery a (OptionalTablishAliases a) (Query r a)
     | TablishJoin a (JoinType a) (JoinCondition r a)
             (Tablish r a) (Tablish r a)
-    | TablishLateralView a (LateralView r a) (Maybe (Tablish r a))
+    | TablishLateralView a (OptionalTablishAliases a) (LateralView r a) (Maybe (Tablish r a))
 
 deriving instance (ConstrainSNames Data r a, Data r) => Data (Tablish r a)
 deriving instance Generic (Tablish r a)
@@ -197,7 +197,6 @@ data LateralView r a = LateralView
     , lateralViewOuter :: Maybe a
     , lateralViewExprs :: [Expr r a]
     , lateralViewWithOrdinality :: Bool
-    , lateralViewAliases :: OptionalTablishAliases a
     }
 
 deriving instance (ConstrainSNames Data r a, Data r) => Data (LateralView r a)
@@ -1245,9 +1244,10 @@ instance ConstrainSNames ToJSON r a => ToJSON (Tablish r a) where
         , "inner" .= inner
         ]
 
-    toJSON (TablishLateralView info view lhs) = object
+    toJSON (TablishLateralView info aliases view lhs) = object
         [ "tag" .= String "TablishLateralView"
         , "info" .= info
+        , "aliases" .= aliases
         , "view" .= view
         , "lhs" .= lhs
         ]
@@ -1260,7 +1260,6 @@ instance ConstrainSNames ToJSON r a => ToJSON (LateralView r a) where
         , "outer" .= lateralViewOuter
         , "exprs" .= lateralViewExprs
         , "with_ordinality" .= lateralViewWithOrdinality
-        , "aliases" .= lateralViewAliases
         ]
 
 
@@ -1937,6 +1936,7 @@ instance ConstrainSNames FromJSON r a => FromJSON (Tablish r a) where
         String "TablishLateralView" ->
             TablishLateralView
                 <$> o .: "info"
+                <*> o .: "aliases"
                 <*> o .: "view"
                 <*> o .: "lhs"
 
@@ -1955,7 +1955,6 @@ instance ConstrainSNames FromJSON r a => FromJSON (LateralView r a) where
         lateralViewOuter <- o .: "outer"
         lateralViewExprs <- o .: "exprs"
         lateralViewWithOrdinality <- o .: "with_ordinality"
-        lateralViewAliases <- o .: "aliases"
         pure LateralView{..}
 
     parseJSON v = fail $ unwords

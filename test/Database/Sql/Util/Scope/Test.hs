@@ -1492,6 +1492,10 @@ testResolutionOnASTs = test
                         { selectFrom = Just
                             ( SelectFrom 5
                                 [ TablishLateralView 6
+                                    ( TablishAliasesTC
+                                      ( TableAlias 13 "f" ( TableAliasId 0 ) )
+                                      [ ColumnAlias 14 "x" ( ColumnAliasId 1 ) ]
+                                    )
                                     ( LateralView
                                         { lateralViewInfo = 7
                                         , lateralViewOuter = Nothing
@@ -1512,10 +1516,6 @@ testResolutionOnASTs = test
                                             Nothing
                                           ]
                                         , lateralViewWithOrdinality = False
-                                        , lateralViewAliases = ( TablishAliasesTC
-                                                                 ( TableAlias 13 "f" ( TableAliasId 0 ) )
-                                                                 [ ColumnAlias 14 "x" ( ColumnAliasId 1 ) ]
-                                                               )
                                         }
                                     )
                                    ( Just ( TablishTable 15 TablishAliasesNone
@@ -1552,6 +1552,7 @@ testResolutionOnASTs = test
                         { selectFrom = Just
                             ( SelectFrom 9
                                 [ TablishLateralView 10
+                                    ( TablishAliasesT $ TableAlias 17 "bar" ( TableAliasId 0 ) )
                                     ( LateralView
                                         { lateralViewInfo = 11
                                         , lateralViewOuter = Nothing
@@ -1572,7 +1573,6 @@ testResolutionOnASTs = test
                                             Nothing
                                           ]
                                         , lateralViewWithOrdinality = False
-                                        , lateralViewAliases = TablishAliasesT $ TableAlias 17 "bar" ( TableAliasId 0 )
                                         }
                                     )
                                     ( Just ( TablishTable 18 TablishAliasesNone
@@ -2596,6 +2596,10 @@ testDefaulting = test
                         { selectFrom = Just
                             ( SelectFrom 5
                                 [ TablishLateralView 6
+                                    ( TablishAliasesTC
+                                      ( TableAlias 13 "f" ( TableAliasId 0 ) )
+                                      [ ColumnAlias 14 "x" ( ColumnAliasId 1 ) ]
+                                    )
                                     ( LateralView
                                         { lateralViewInfo = 7
                                         , lateralViewOuter = Nothing
@@ -2616,10 +2620,6 @@ testDefaulting = test
                                             Nothing
                                           ]
                                         , lateralViewWithOrdinality = False
-                                        , lateralViewAliases = ( TablishAliasesTC
-                                                                 ( TableAlias 13 "f" ( TableAliasId 0 ) )
-                                                                 [ ColumnAlias 14 "x" ( ColumnAliasId 1 ) ]
-                                                               )
                                         }
                                     )
                                     ( Just ( TablishTable 15 TablishAliasesNone
@@ -2656,6 +2656,7 @@ testDefaulting = test
                         { selectFrom = Just
                             ( SelectFrom 9
                                 [ TablishLateralView 10
+                                    ( TablishAliasesT $ TableAlias 17 "bar" ( TableAliasId 0 ) )
                                     ( LateralView
                                         { lateralViewInfo = 11
                                         , lateralViewOuter = Nothing
@@ -2676,7 +2677,6 @@ testDefaulting = test
                                             Nothing
                                           ]
                                         , lateralViewWithOrdinality = False
-                                        , lateralViewAliases = TablishAliasesT $ TableAlias 17 "bar" ( TableAliasId 0 )
                                         }
                                     )
                                     ( Just ( TablishTable 18 TablishAliasesNone

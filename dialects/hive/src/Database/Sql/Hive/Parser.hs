@@ -1223,7 +1223,7 @@ tablishToTableAlias (TablishSubQuery _ aliases _) = case aliases of
     TablishAliasesNone -> error "shouldn't happen in hive"
     TablishAliasesT (TableAlias _ name _) -> S.singleton name
     TablishAliasesTC _ _ -> error "shouldn't happen in hive"
-tablishToTableAlias (TablishLateralView _ LateralView{..} _) = case lateralViewAliases of
+tablishToTableAlias (TablishLateralView _ aliases _ _) = case aliases of
     TablishAliasesNone -> error "shouldn't happen in hive"
     TablishAliasesT (TableAlias _ name _) -> S.singleton name
     TablishAliasesTC (TableAlias _ name _) _ -> S.singleton name
@@ -2238,7 +2238,7 @@ lateralViewP = do
     cAliases <- optionMaybe $ do
         _ <- Tok.asP
         columnAliasP `sepBy1` Tok.commaP
-    let lateralViewAliases = case cAliases of
+    let aliases = case cAliases of
             Nothing -> TablishAliasesT tAlias
             Just cAliases' -> TablishAliasesTC tAlias cAliases'
 
@@ -2246,7 +2246,7 @@ lateralViewP = do
         es = maybe [] (map getInfo) cAliases
         lateralViewInfo = s <> sconcat (e:|es)
 
-    pure $ \ lhs -> TablishLateralView (getInfo lhs <> lateralViewInfo) LateralView{..} (Just lhs)
+    pure $ \ lhs -> TablishLateralView (getInfo lhs <> lateralViewInfo) aliases LateralView{..} (Just lhs)
 
 
 optionalParensP :: Parser a -> Parser a
