@@ -220,7 +220,7 @@ instance Evaluation e => Evaluate e (Tablish ResolvedNames Range) where
         y <- eval p rhs
         handleJoin p joinType cond x y
 
-    eval _ (TablishLateralView _ _ _) = error "lateral view not yet supported"
+    eval _ TablishLateralView{} = error "lateral view not yet supported"
 
 
 instance Evaluation e => Evaluate e (JoinCondition ResolvedNames Range) where

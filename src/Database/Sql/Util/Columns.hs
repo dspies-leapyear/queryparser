@@ -398,7 +398,7 @@ instance HasColumns (Tablish ResolvedNames a) where
         goColumns lhs
         goColumns rhs
 
-    goColumns (TablishLateralView _ LateralView{..} lhs) = do
+    goColumns (TablishLateralView _ aliases LateralView{..} lhs) = do
         -- recurse to emit clause infos
         bindClause "LATERALVIEW" $ do
             goColumns lhs
@@ -413,7 +413,7 @@ instance HasColumns (Tablish ResolvedNames a) where
         -- aliases to the (Set RColumnRefs) they refer to in the general case
         -- :-( So let's just handle the particular case where lateralViewExpr
         -- is a singleton list :-)
-        case lateralViewAliases of
+        case aliases of
             TablishAliasesNone -> return ()
             TablishAliasesT _ -> return ()
             TablishAliasesTC _ cAliases -> case lateralViewExprs of
@@ -424,7 +424,7 @@ instance HasColumns (Tablish ResolvedNames a) where
                 _ -> return () -- alas, the general case
 
 instance HasColumns (LateralView ResolvedNames a) where
-    goColumns (LateralView _ _ exprs _ _) = mapM_ goColumns exprs
+    goColumns (LateralView _ _ exprs _) = mapM_ goColumns exprs
 
 instance HasColumns (JoinCondition ResolvedNames a) where
     goColumns (JoinNatural _ cs) = goColumns cs

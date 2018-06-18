@@ -272,7 +272,7 @@ tableAliases from =
         TablishAliasesNone -> S.empty
         TablishAliasesT (TableAlias _ name _) -> S.singleton name
         TablishAliasesTC (TableAlias _ name _) _ -> S.singleton name
-    tablishToTableAlias (TablishLateralView _ LateralView{..} _) = case lateralViewAliases of
+    tablishToTableAlias (TablishLateralView _ aliases LateralView{..} _) = case aliases of
         TablishAliasesNone -> S.empty
         TablishAliasesT (TableAlias _ name _) -> S.singleton name
         TablishAliasesTC (TableAlias _ name _) _ -> S.singleton name
@@ -356,7 +356,7 @@ sampledRelationP = do
 
                   let lateralViewInfo = r1 <> r3
                       lateralViewAliases = placeholder
-                  return $ TablishLateralView lateralViewInfo LateralView{..} Nothing
+                  return $ TablishLateralView lateralViewInfo lateralViewAliases LateralView{..} Nothing
 
             , P.between Tok.openP Tok.closeP $ choice
                 [ relationP
@@ -370,7 +370,7 @@ sampledRelationP = do
                 TablishTable info _ tableRef -> TablishTable info as tableRef
                 TablishSubQuery info _ query -> TablishSubQuery info as query
                 TablishJoin _ _ _ _ _ -> error "shouldn't happen"
-                TablishLateralView info LateralView{..} lhs -> TablishLateralView info LateralView{lateralViewAliases = as, ..} lhs
+                TablishLateralView info _ lv lhs -> TablishLateralView info as lv lhs
         return withAliases
 
     tablishAliasesP :: Parser (OptionalTablishAliases Range)

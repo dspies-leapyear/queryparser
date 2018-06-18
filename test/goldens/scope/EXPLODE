@@ -36,6 +36,8 @@
                       Just
                         (SelectFrom 5
                            [TablishLateralView 6
+                              (TablishAliasesTC (TableAlias 13 "f" (TableAliasId 0))
+                                 [ColumnAlias 14 "x" (ColumnAliasId 1)])
                               (LateralView{lateralViewInfo = 7, lateralViewOuter = Nothing,
                                            lateralViewExprs =
                                              [FunctionExpr 8
@@ -73,10 +75,7 @@
                                                 []
                                                 Nothing
                                                 Nothing],
-                                           lateralViewWithOrdinality = False,
-                                           lateralViewAliases =
-                                             TablishAliasesTC (TableAlias 13 "f" (TableAliasId 0))
-                                               [ColumnAlias 14 "x" (ColumnAliasId 1)]})
+                                           lateralViewWithOrdinality = False})
                               (Just
                                  (TablishTable 15 TablishAliasesNone
                                     (RTableRef
