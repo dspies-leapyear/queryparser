@@ -6,47 +6,43 @@
                     selectCols =
                       SelectColumns{selectColumnsInfo = 3,
                                     selectColumnsList =
-                                      [SelectExpr 4 [ColumnAlias 5 "x" (ColumnAliasId 1)]
+                                      [SelectExpr 4 [ColumnAlias 5 "a" (ColumnAliasId 1)]
                                          (ColumnExpr 6
-                                            (RColumnRef
-                                               (QColumnName{columnNameInfo = 8,
-                                                            columnNameTable =
-                                                              Identity
-                                                                (QTableName{tableNameInfo = 7,
-                                                                            tableNameSchema =
-                                                                              Identity
-                                                                                (QSchemaName{schemaNameInfo
-                                                                                               = 7,
-                                                                                             schemaNameDatabase
-                                                                                               =
-                                                                                               Identity
-                                                                                                 (DatabaseName
-                                                                                                    7
-                                                                                                    "default_db"),
-                                                                                             schemaNameName
-                                                                                               =
-                                                                                               "public",
-                                                                                             schemaNameType
-                                                                                               =
-                                                                                               NormalSchema}),
-                                                                            tableNameName = "bar"}),
-                                                            columnNameName = "x"})))]},
+                                            (RColumnAlias
+                                               (ColumnAlias 15 "a" (ColumnAliasId (-4)))))]},
                     selectFrom =
                       Just
                         (SelectFrom 9
                            [TablishSubQuery 10
-                              (TablishAliasesT (TableAlias 11 "baz" (TableAliasId 2)))
+                              (RTablishAliases (Right (TableAlias 11 "baz" (TableAliasId 2)))
+                                 [ColumnAlias 15 "a" (ColumnAliasId (-4)),
+                                  ColumnAlias 15 "b" (ColumnAliasId (-5))])
                               (QuerySelect 12
                                  (Select{selectInfo = 13,
                                          selectCols =
                                            SelectColumns{selectColumnsInfo = 14,
                                                          selectColumnsList =
                                                            [SelectStar 15 Nothing
-                                                              (StarColumnNames [])]},
+                                                              (StarColumnNames
+                                                                 [(RColumnAlias
+                                                                     (ColumnAlias 15 "a"
+                                                                        (ColumnAliasId (-2))),
+                                                                   ColumnAlias 15 "a"
+                                                                     (ColumnAliasId (-4))),
+                                                                  (RColumnAlias
+                                                                     (ColumnAlias 15 "b"
+                                                                        (ColumnAliasId (-3))),
+                                                                   ColumnAlias 15 "b"
+                                                                     (ColumnAliasId (-5)))])]},
                                          selectFrom =
                                            Just
                                              (SelectFrom 16
-                                                [TablishTable 17 TablishAliasesNone
+                                                [TablishTable 17
+                                                   (RTablishAliases
+                                                      (Right
+                                                         (TableAlias 17 "bar" (TableAliasId (-1))))
+                                                      [ColumnAlias 17 "a" (ColumnAliasId (-2)),
+                                                       ColumnAlias 17 "b" (ColumnAliasId (-3))])
                                                    (RTableRef
                                                       (QTableName{tableNameInfo = 18,
                                                                   tableNameSchema =
@@ -87,15 +83,4 @@
                     selectWhere = Nothing, selectTimeseries = Nothing,
                     selectGroup = Nothing, selectHaving = Nothing,
                     selectNamedWindow = Nothing, selectDistinct = Distinct False})))),
- [MissingColumn
-    (QColumnName{columnNameInfo = 8,
-                 columnNameTable =
-                   Just
-                     (QTableName{tableNameInfo = 7,
-                                 tableNameSchema =
-                                   Just
-                                     (QSchemaName{schemaNameInfo = 7, schemaNameDatabase = Nothing,
-                                                  schemaNameName = "public",
-                                                  schemaNameType = NormalSchema}),
-                                 tableNameName = "bar"}),
-                 columnNameName = "x"})])
+ [])

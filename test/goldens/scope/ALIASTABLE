@@ -6,36 +6,17 @@
                     selectCols =
                       SelectColumns{selectColumnsInfo = 3,
                                     selectColumnsList =
-                                      [SelectExpr 4 [ColumnAlias 5 "x" (ColumnAliasId 1)]
+                                      [SelectExpr 4 [ColumnAlias 5 "a" (ColumnAliasId 1)]
                                          (ColumnExpr 6
-                                            (RColumnRef
-                                               (QColumnName{columnNameInfo = 8,
-                                                            columnNameTable =
-                                                              Identity
-                                                                (QTableName{tableNameInfo = 7,
-                                                                            tableNameSchema =
-                                                                              Identity
-                                                                                (QSchemaName{schemaNameInfo
-                                                                                               = 7,
-                                                                                             schemaNameDatabase
-                                                                                               =
-                                                                                               Identity
-                                                                                                 (DatabaseName
-                                                                                                    7
-                                                                                                    "default_db"),
-                                                                                             schemaNameName
-                                                                                               =
-                                                                                               "public",
-                                                                                             schemaNameType
-                                                                                               =
-                                                                                               NormalSchema}),
-                                                                            tableNameName = "bar"}),
-                                                            columnNameName = "x"})))]},
+                                            (RColumnAlias
+                                               (ColumnAlias 10 "a" (ColumnAliasId (-1)))))]},
                     selectFrom =
                       Just
                         (SelectFrom 9
                            [TablishTable 10
-                              (TablishAliasesT (TableAlias 11 "baz" (TableAliasId 2)))
+                              (RTablishAliases (Right (TableAlias 11 "baz" (TableAliasId 2)))
+                                 [ColumnAlias 10 "a" (ColumnAliasId (-1)),
+                                  ColumnAlias 10 "b" (ColumnAliasId (-2))])
                               (RTableRef
                                  (QTableName{tableNameInfo = 12,
                                              tableNameSchema =
@@ -59,15 +40,4 @@
                     selectWhere = Nothing, selectTimeseries = Nothing,
                     selectGroup = Nothing, selectHaving = Nothing,
                     selectNamedWindow = Nothing, selectDistinct = Distinct False})))),
- [MissingColumn
-    (QColumnName{columnNameInfo = 8,
-                 columnNameTable =
-                   Just
-                     (QTableName{tableNameInfo = 7,
-                                 tableNameSchema =
-                                   Just
-                                     (QSchemaName{schemaNameInfo = 7, schemaNameDatabase = Nothing,
-                                                  schemaNameName = "public",
-                                                  schemaNameType = NormalSchema}),
-                                 tableNameName = "bar"}),
-                 columnNameName = "x"})])
+ [])

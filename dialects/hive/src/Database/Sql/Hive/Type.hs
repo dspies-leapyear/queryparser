@@ -331,11 +331,8 @@ resolveAlterPartitionSetLocation :: AlterPartitionSetLocation RawNames a -> Reso
 resolveAlterPartitionSetLocation AlterPartitionSetLocation{..} = do
     alterPartitionSetLocationTable'@(RTableName fqtn table@SchemaMember{..}) <- resolveTableName alterPartitionSetLocationTable
     let tableInfo = tableNameInfo fqtn
-        columnSet =
-            [ ( Just $ RTableRef fqtn table
-              , map (RColumnRef . (const tableInfo <$>) . qualifyColumnName fqtn) columnsList
-              )
-            ]
+        columnSet = makeColumnSet (Just $ RTableRef fqtn table) $ map (RColumnRef . (const tableInfo <$>) . qualifyColumnName fqtn) columnsList
+
     alterPartitionSetLocationPartition' <- bindColumns columnSet
         $ forM alterPartitionSetLocationPartition
             $ \ (StaticPartitionSpecItem info column constant) -> do

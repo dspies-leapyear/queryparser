@@ -580,6 +580,8 @@ testParser = test
                                 [ TablishJoin (Range (Position 1 16 16)
                                                      (Position 1 44 44))
 
+                                    Unused
+
                                     (JoinInner (Range (Position 1 20 20)
                                                       (Position 1 30 30)))
 

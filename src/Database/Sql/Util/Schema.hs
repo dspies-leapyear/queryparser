@@ -311,9 +311,8 @@ instance HasSchemaChange (AST.AlterTable AST.ResolvedNames a) where
         let toAddColumn uqcn = AddColumn $ void $ uqcn { columnNameTable = Identity table }
          in map toAddColumn (c:cs)
 
-toUQCN :: AST.RColumnRef a -> UQColumnName ()
-toUQCN (AST.RColumnRef (QColumnName _ _ column)) = QColumnName () None column
-toUQCN (AST.RColumnAlias (ColumnAlias _ column _)) = QColumnName () None column
+toUQCN :: AST.ColumnAlias a -> UQColumnName ()
+toUQCN (ColumnAlias _ column _) = QColumnName () None column
 
 instance HasSchemaChange (AST.ResolutionError a) where
     getSchemaChange (AST.MissingDatabase db) = [CreateDatabase (void db) HMS.empty]
@@ -351,7 +350,7 @@ instance HasSchemaChange (ResolutionSuccess a) where
 
     -- I don't think we can infer anything about the schema from aliases
     getSchemaChange (ColumnRefDefaulted _ (RColumnAlias _)) = []
-    getSchemaChange (TableRefDefaulted _ (RTableAlias _)) = []
+    getSchemaChange (TableRefDefaulted _ (RTableAlias _ _)) = []
 
     -- resolving means we have it right, no changes
     getSchemaChange (TableNameResolved _ _) = []

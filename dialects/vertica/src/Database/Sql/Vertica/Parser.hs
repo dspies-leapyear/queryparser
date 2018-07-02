@@ -1781,7 +1781,7 @@ regularJoinP = do
 
     let r lhs = getInfo lhs <> getInfo rhs <> getInfo condition
     return $ \ lhs ->
-        TablishJoin (r lhs) joinType condition lhs rhs
+        TablishJoin (r lhs) Unused joinType condition lhs rhs
 
 outerJoinTypeP :: Parser (JoinType Range)
 outerJoinTypeP = do
@@ -1809,7 +1809,7 @@ naturalJoinP = do
     rhs <- singleTableP
 
     let r' lhs = getInfo lhs <> getInfo rhs
-    return $ \ lhs -> TablishJoin (r' lhs) joinType (JoinNatural r Unused) lhs rhs
+    return $ \ lhs -> TablishJoin (r' lhs) Unused joinType (JoinNatural r Unused) lhs rhs
 
 crossJoinP :: Parser (Tablish RawNames Range -> Tablish RawNames Range)
 crossJoinP = do
@@ -1821,7 +1821,7 @@ crossJoinP = do
         joinInfo = r <> r'
         true' = JoinOn $ ConstantExpr joinInfo $ BooleanConstant joinInfo True
     return $ \ lhs ->
-        TablishJoin (r'' lhs) (JoinInner joinInfo) true' lhs rhs
+        TablishJoin (r'' lhs) Unused (JoinInner joinInfo) true' lhs rhs
 
 
 createProjectionPrefixP :: Parser Range

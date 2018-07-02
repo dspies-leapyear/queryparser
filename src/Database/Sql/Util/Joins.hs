@@ -20,13 +20,14 @@
 
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Database.Sql.Util.Joins (HasJoins(..), JoinsResult) where
 
 import Database.Sql.Type
 
-import qualified Data.Map as M
-import Data.Map (Map)
+import qualified Data.Map.Strict as M
+import Data.Map.Strict (Map)
 
 import qualified Data.Set as S
 import Data.Set (Set)
@@ -35,7 +36,7 @@ import Data.Semigroup
 
 import Data.Functor.Identity
 import Data.Foldable
-import Control.Monad (void, when)
+import Control.Monad (void, when, zipWithM_)
 import Control.Monad.Writer (Writer, execWriter, tell)
 
 data Result = Result
@@ -58,11 +59,14 @@ class HasJoins q where
 instance HasJoins (Statement d ResolvedNames a) where
     getJoins stmt =
         let Result{..} = execWriter $ getJoinsStatement stmt
-            unalias :: Map (RColumnRef ()) FieldChain -> Map (FQColumnName ()) FieldChain
-            unalias m = M.fromList $ M.toList m >>= \case
+            unalias :: [ColumnAliasId] -> Map (RColumnRef ()) FieldChain -> Map (FQColumnName ()) FieldChain
+            unalias aliases m = M.fromList $ M.toList m >>= \case
                 (RColumnRef fqcn, chain) -> [(fqcn, chain)]
-                (RColumnAlias (ColumnAlias _ _ aliasId), _) -> maybe [] (M.toList . unalias) $ M.lookup aliasId resultBindings
-            sets = S.map unalias resultColumns
+                (RColumnAlias (ColumnAlias _ _ aliasId), _) ->
+                    if aliasId `elem` aliases
+                    then error $ "loop: " ++ show (aliasId, aliases)
+                    else maybe [] (M.toList . unalias (aliasId : aliases)) $ M.lookup aliasId resultBindings
+            sets = S.map (unalias []) resultColumns
 
             toPairs m
                 | M.null m = []
@@ -117,7 +121,7 @@ queryColumns (QueryLimit _ _ query) = queryColumns query
 queryColumns (QueryOffset _ _ query) = queryColumns query
 queryColumns (QuerySelect _ Select{selectCols = SelectColumns _ selections}) = selections >>= \case
     SelectExpr _ aliases _ -> map RColumnAlias aliases
-    SelectStar _ _ (StarColumnNames cols) -> cols
+    SelectStar _ _ (StarColumnNames cols) -> map (RColumnAlias . snd) cols
 
 
 getJoinsCreateTable :: CreateTable d ResolvedNames a -> Scoped ()
@@ -342,24 +346,36 @@ getJoinsOrder :: Order ResolvedNames a -> Scoped ()
 getJoinsOrder (Order _ posOrExpr _ _) = void $ getJoinsPositionOrExpr posOrExpr
 
 getJoinsTablish :: Tablish ResolvedNames a -> Scoped ()
-getJoinsTablish (TablishTable _ _ _) = pure ()
+getJoinsTablish (TablishTable _ (RTablishAliases _ aliases) ref) =
+    case ref of
+        RTableAlias _ aliases' -> zipWithM_ bind' aliases $ map (RColumnAlias . void) aliases'
+        RTableRef tableName SchemaMember{..} ->
+            let toRef (QColumnName () None columnName) = RColumnRef $ QColumnName () (pure $ void tableName) columnName
+             in zipWithM_ bind' aliases $ map toRef columnsList
+  where
+    bind' a c = bind (columnAliasId a) $ M.singleton c (FieldChain mempty)
+
 getJoinsTablish (TablishLateralView _ _ LateralView{..} lhs) = do
     maybe (pure ()) getJoinsTablish lhs
     mapM_ getJoinsExpr lateralViewExprs
 
 getJoinsTablish (TablishSubQuery _ _ query) = getJoinsQuery query
-getJoinsTablish (TablishJoin _ _ (JoinNatural _ (RNaturalColumns columns)) lhs rhs) = do
+getJoinsTablish (TablishJoin _ _ _ (JoinNatural _ (RNaturalColumns columns)) lhs rhs) = do
+    -- TODO bind aliases
     getJoinsTablish lhs
     getJoinsTablish rhs
     forM_ columns $ \ (RUsingColumn lcol rcol) -> do
         emit $ M.fromSet (const $ FieldChain M.empty) $ S.fromList [void lcol, void rcol]
 
-getJoinsTablish (TablishJoin _ _ (JoinOn expr) lhs rhs) = do
+getJoinsTablish (TablishJoin _ (RTablishAliases _ aliases) _ (JoinOn expr) lhs rhs) = do
     getJoinsTablish lhs
     getJoinsTablish rhs
+    zipWithM_ bind (map getID aliases) $ map ((`M.singleton` FieldChain mempty) . RColumnAlias . void) $ tablishColumnAliases lhs ++ tablishColumnAliases rhs
     void $ getJoinsExpr expr
+  where 
+    getID (ColumnAlias _ _ ident) = ident
 
-getJoinsTablish (TablishJoin _ _ (JoinUsing _ columns) lhs rhs) = do
+getJoinsTablish (TablishJoin _ _ _ (JoinUsing _ columns) lhs rhs) = do
     getJoinsTablish lhs
     getJoinsTablish rhs
     forM_ columns $ \ (RUsingColumn lcol rcol) -> do
@@ -371,7 +387,8 @@ getJoinsCTE (CTE _ _ _ query) = getJoinsQuery query
 
 
 getJoinsSelection :: Selection ResolvedNames a -> Scoped ()
-getJoinsSelection (SelectStar _ _ _) = pure ()
+getJoinsSelection (SelectStar _ _ (StarColumnNames pairs)) =
+    forM_ pairs $ \ (col, ColumnAlias _ _ aliasId) -> bind aliasId $ M.singleton (void col) (FieldChain mempty)
 getJoinsSelection (SelectExpr _ aliases expr) = do
     cols <- getJoinsExpr expr
     forM_ aliases $ \ (ColumnAlias _ _ aliasId) -> bind aliasId cols

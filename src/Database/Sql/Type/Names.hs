@@ -308,7 +308,7 @@ type FQTableName = QTableName Identity
 
 newtype TableAliasId
     = TableAliasId Integer
-      deriving (Data, Generic, Read, Show, Eq, Ord)
+      deriving (Data, Generic, Read, Show, Eq, Ord, ToJSON, FromJSON)
 
 data TableAlias a
     = TableAlias a Text TableAliasId
@@ -399,6 +399,8 @@ newtype ColumnAliasId
     = ColumnAliasId Integer
       deriving (Data, Generic, Read, Show, Eq, Ord)
 
+instance Hashable ColumnAliasId
+
 instance (Arbitrary (f (QTableName f a)), Arbitrary a) => Arbitrary (QColumnName f a) where
     arbitrary = do
         Identifier name :: Identifier '["fooColumn", "barColumn"] <- arbitrary
@@ -412,8 +414,13 @@ data ColumnAlias a
                , Read, Show, Eq, Ord
                , Functor, Foldable, Traversable)
 
+instance Hashable a => Hashable (ColumnAlias a)
+
 columnAliasName :: ColumnAlias a -> UQColumnName a
 columnAliasName (ColumnAlias info name _) = QColumnName info None name
+
+columnAliasId :: ColumnAlias a -> ColumnAliasId
+columnAliasId (ColumnAlias _ _ ident) = ident
 
 data RColumnRef a
     = RColumnRef (FQColumnName a)
@@ -422,6 +429,7 @@ data RColumnRef a
                , Read, Show, Eq, Ord
                , Functor, Foldable, Traversable)
 
+instance Hashable a => Hashable (RColumnRef a)
 
 data StructFieldName a = StructFieldName a Text
     deriving (Data, Generic, Eq, Ord, Show, Functor, Foldable, Traversable)

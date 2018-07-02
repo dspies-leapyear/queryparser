@@ -25,7 +25,6 @@
 module Database.Sql.Util.Columns.Test where
 
 import Test.HUnit
-import Test.HUnit.Ticket
 
 import qualified Database.Sql.Util.Test as Test
 
@@ -166,11 +165,24 @@ testColumnAccesses = test
               , (FullyQualifiedColumnName "default_db" "public" "bar" "a", "WHERE")  -- from the main SELECT
               ]
           )
-          , testVertica "WITH cte (x) AS (SELECT a FROM foo ORDER BY a LIMIT 1) SELECT 1 FROM cte WHERE x;" defaultTestCatalog
+        , testVertica "WITH cte (x) AS (SELECT a FROM foo ORDER BY a LIMIT 1) SELECT 1 FROM cte WHERE x;" defaultTestCatalog
           ((@=?) $ S.fromList
               [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT") -- from the CTE definition
               , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")  -- from the CTE definition
               , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "WHERE")  -- from the main SELECT
+              ]
+          )
+
+        , testPresto "WITH cte AS (SELECT a FROM foo) SELECT cAlias FROM cte AS tAlias (cAlias) ORDER BY cAlias;" defaultTestCatalog
+          ((@=?) $ S.fromList
+              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
+              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
+              ]
+          )
+        , testPresto "WITH cte (x) AS (SELECT a FROM foo) SELECT cAlias FROM cte AS tAlias (cAlias) ORDER BY cAlias;" defaultTestCatalog
+          ((@=?) $ S.fromList
+              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
+              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
               ]
           )
 
@@ -185,30 +197,6 @@ testColumnAccesses = test
           ((@=?) $ S.fromList
               [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
               , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
-              ]
-          )
-        , let query = TL.unlines
-                [ "SELECT arrayVal"
-                , "FROM foo AS fooAlias (arrayCol)"
-                , "CROSS JOIN UNNEST(arrayCol) AS latViewAlias (arrayVal);"
-                ]
-           in testPresto query defaultTestCatalog
-          ((@=?) $ S.fromList
-              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "LATERALVIEW")
-              ]
-          )
-        , let query = TL.unlines
-                [ "SELECT mapVal"
-                , "FROM foo AS fooAlias (mapCol)"
-                , "CROSS JOIN UNNEST(mapCol) AS latViewAlias (mapKey, mapVal)"
-                , "ORDER BY mapKey;"
-                ]
-           in testPresto query defaultTestCatalog
-          ((@=?) $ S.fromList
-              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
-              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "LATERALVIEW")
               ]
           )
 
@@ -242,10 +230,6 @@ testColumnAccesses = test
                   , (FullyQualifiedColumnName "default_db" "public" "bar" "b", "ORDER")
                   ]
               )
-        , testHive "SELECT 1 FROM foo LATERAL VIEW explode(a) exploded AS x;" defaultTestCatalog
-          ((@=?) $ S.singleton
-              (FullyQualifiedColumnName "default_db" "public" "foo" "a", "LATERALVIEW")
-          )
         , testVertica "SELECT RANK() OVER x FROM foo WINDOW x AS (PARTITION BY a ORDER BY a ASC);" defaultTestCatalog
           ((@=?) $ S.fromList
               [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "PARTITION")
@@ -315,38 +299,6 @@ testColumnAccesses = test
                   , (FullyQualifiedColumnName "default_db" "public" "tabB" "col1", "WHERE")
                   ]
               )
-        ]
-
-    , ticket "T681602" $ concat
-        [ let query = TL.unlines
-                [ "SELECT c1prime, c2prime, c3prime"
-                , "FROM bar AS barAlias (c1, c2)"
-                , "CROSS JOIN UNNEST(c1, c2) AS latViewAlias (c1prime, c2prime, c3prime);"
-                -- this is the "general case" because UNNEST has two args
-                ]
-           in testPresto query defaultTestCatalog
-          ((@=?) $ S.fromList
-              [ (FullyQualifiedColumnName "default_db" "public" "bar" "a", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "bar" "b", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "bar" "a", "LATERALVIEW")
-              , (FullyQualifiedColumnName "default_db" "public" "bar" "b", "LATERALVIEW")
-              ]
-          )
-        ]
-
-    , ticket "T681632" $ concat
-        [ testPresto "WITH cte AS (SELECT a FROM foo) SELECT cAlias FROM cte AS tAlias (cAlias) ORDER BY cAlias;" defaultTestCatalog
-          ((@=?) $ S.fromList
-              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
-              ]
-          )
-        , testPresto "WITH cte (x) AS (SELECT a FROM foo) SELECT cAlias FROM cte AS tAlias (cAlias) ORDER BY cAlias;" defaultTestCatalog
-          ((@=?) $ S.fromList
-              [ (FullyQualifiedColumnName "default_db" "public" "foo" "a", "SELECT")
-              , (FullyQualifiedColumnName "default_db" "public" "foo" "a", "ORDER")
-              ]
-          )
         ]
     ]
 

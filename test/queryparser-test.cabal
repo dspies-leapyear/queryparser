@@ -6,7 +6,7 @@ name:                queryparser-test
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.1.0.0
+version:             0.2.0.0
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -92,7 +92,7 @@ library
                      , syb
   hs-source-dirs:      .
 
-  ghc-options: -Wall -Werror -with-rtsopts=-M5M
+  ghc-options: -Wall -Werror -with-rtsopts=-M10M
 
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings
@@ -155,7 +155,7 @@ test-suite queryparser-test-suite
                      , QuickCheck
                      , syb
   hs-source-dirs:      .
-  ghc-options: -Wall -Werror -with-rtsopts=-M5M
+  ghc-options: -Wall -Werror -with-rtsopts=-M10M
 
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings
