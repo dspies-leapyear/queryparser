@@ -68,6 +68,7 @@ data TestAnalysis q =
             }
     | forall d a .
         ( ParseableDialect d
+        , Show a
         , a ~ Resolved (ParseResult d)
         , TestableAnalysis q a
         , Resolvable (ParseResult d)

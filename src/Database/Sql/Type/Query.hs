@@ -148,16 +148,16 @@ data OptionalTablishAliases a
       deriving (Generic, Data, Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data RTablishAliases a
-    = RTablishAliases (Maybe (TableAlias a)) [ColumnAlias a]
+    = RTablishAliases (Either TableAliasId (TableAlias a)) [ColumnAlias a]
       deriving (Generic, Data, Eq, Ord, Show, Functor, Foldable, Traversable)
 
 -- Tablish is a Table, Query, or join of 2 Tablishs
 data Tablish r a
-    = TablishTable a (OptionalTablishAliases a) (TableRef r a)
-    | TablishSubQuery a (OptionalTablishAliases a) (Query r a)
-    | TablishJoin a (JoinType a) (JoinCondition r a)
+    = TablishTable a (OTablishAliases r a) (TableRef r a)
+    | TablishSubQuery a (OTablishAliases r a) (Query r a)
+    | TablishJoin a (ITablishAliases r a) (JoinType a) (JoinCondition r a)
             (Tablish r a) (Tablish r a)
-    | TablishLateralView a (OptionalTablishAliases a) (LateralView r a) (Maybe (Tablish r a))
+    | TablishLateralView a (OTablishAliases r a) (LateralView r a) (Maybe (Tablish r a))
 
 deriving instance (ConstrainSNames Data r a, Data r) => Data (Tablish r a)
 deriving instance Generic (Tablish r a)
@@ -1235,10 +1235,11 @@ instance ConstrainSNames ToJSON r a => ToJSON (Tablish r a) where
         , "query" .= query
         ]
 
-    toJSON (TablishJoin info join condition outer inner) = object
+    toJSON (TablishJoin info aliases join condition outer inner) = object
         [ "tag" .= String "TablishJoin"
         , "info" .= info
         , "join" .= join
+        , "aliases" .= aliases
         , "condition" .= condition
         , "outer" .= outer
         , "inner" .= inner
@@ -1928,6 +1929,7 @@ instance ConstrainSNames FromJSON r a => FromJSON (Tablish r a) where
         String "TablishJoin" ->
             TablishJoin
                 <$> o .: "info"
+                <*> o .: "aliases"
                 <*> o .: "join"
                 <*> o .: "condition"
                 <*> o .: "outer"

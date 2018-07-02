@@ -176,7 +176,7 @@ testEvaluation = test
 
         , testAll "SELECT * FROM foo ORDER BY a;" defaultTestCatalog $ \ f -> do
             assertQuickCheck "order by works" $ \ (ConcreteDb db :: ConcreteDb DefaultCatalogType) ->
-                let Right rows = recordSetItems <$> runEval f (lookupDB db)
+                let rows = either (error . show) id $ recordSetItems <$> runEval f (lookupDB db)
                     Just (RecordSet _ fooRows) = M.lookup (QTableName () (pure $ inDefaultDatabase "public") "foo") db
                  in rows == sort fooRows
 
@@ -241,8 +241,6 @@ tests = test
     , ticket "T628765" $ testHive "SELECT 1 FROM foo LEFT SEMI JOIN bar ON FALSE;" defaultTestCatalog $ \ f -> do
             assertQuickCheck "left semi join on false produces no rows" $ \ (ConcreteDb db :: ConcreteDb DefaultCatalogType) ->
                 (recordSetItems <$> runEval f (lookupDB db)) == Right []
-    , ticket "T628851" $ testHive "SELECT x FROM foo LATERAL VIEW explode(a) atbl AS x;" defaultTestCatalog $ \ f -> do
-            assertQuickCheck "can evaluate query with lateral view" $ \ (ConcreteDb db :: ConcreteDb DefaultCatalogType) -> isRight $ runEval f (lookupDB db)
     , ticket "T636495" $ testVertica "SELECT 'a' LIKE 'a';" defaultTestCatalog $ \ f -> do
             recordSetItems <$> runEval f lookupNoDB @?= Right [[SqlBool True]]
     , ticket "T636505" $ testVertica "SELECT ABS(a) FROM foo;" defaultTestCatalog $ \ f -> do

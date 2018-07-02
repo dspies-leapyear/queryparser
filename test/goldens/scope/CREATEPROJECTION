@@ -12,39 +12,18 @@
                                                     selectColumnsList =
                                                       [SelectStar 6 Nothing
                                                          (StarColumnNames
-                                                            [RColumnRef
-                                                               (QColumnName{columnNameInfo = 6,
-                                                                            columnNameTable =
-                                                                              Identity
-                                                                                (QTableName{tableNameInfo
-                                                                                              = 6,
-                                                                                            tableNameSchema
-                                                                                              =
-                                                                                              Identity
-                                                                                                (QSchemaName{schemaNameInfo
-                                                                                                               =
-                                                                                                               6,
-                                                                                                             schemaNameDatabase
-                                                                                                               =
-                                                                                                               Identity
-                                                                                                                 (DatabaseName
-                                                                                                                    6
-                                                                                                                    "default_db"),
-                                                                                                             schemaNameName
-                                                                                                               =
-                                                                                                               "public",
-                                                                                                             schemaNameType
-                                                                                                               =
-                                                                                                               NormalSchema}),
-                                                                                            tableNameName
-                                                                                              =
-                                                                                              "foo"}),
-                                                                            columnNameName =
-                                                                              "a"})])]},
+                                                            [(RColumnAlias
+                                                                (ColumnAlias 6 "a"
+                                                                   (ColumnAliasId (-2))),
+                                                              ColumnAlias 6 "a"
+                                                                (ColumnAliasId (-3)))])]},
                                     selectFrom =
                                       Just
                                         (SelectFrom 7
-                                           [TablishTable 8 TablishAliasesNone
+                                           [TablishTable 8
+                                              (RTablishAliases
+                                                 (Right (TableAlias 8 "foo" (TableAliasId (-1))))
+                                                 [ColumnAlias 8 "a" (ColumnAliasId (-2))])
                                               (RTableRef
                                                  (QTableName{tableNameInfo = 9,
                                                              tableNameSchema =
@@ -80,28 +59,7 @@
                                                  functionNameName = "hash"})
                                   (Distinct False)
                                   [ColumnExpr 13
-                                     (RColumnRef
-                                        (QColumnName{columnNameInfo = 14,
-                                                     columnNameTable =
-                                                       Identity
-                                                         (QTableName{tableNameInfo = 14,
-                                                                     tableNameSchema =
-                                                                       Identity
-                                                                         (QSchemaName{schemaNameInfo
-                                                                                        = 14,
-                                                                                      schemaNameDatabase
-                                                                                        =
-                                                                                        Identity
-                                                                                          (DatabaseName
-                                                                                             14
-                                                                                             "default_db"),
-                                                                                      schemaNameName
-                                                                                        = "public",
-                                                                                      schemaNameType
-                                                                                        =
-                                                                                        NormalSchema}),
-                                                                     tableNameName = "foo"}),
-                                                     columnNameName = "a"}))]
+                                     (RColumnAlias (ColumnAlias 8 "a" (ColumnAliasId (-2))))]
                                   []
                                   Nothing
                                   Nothing)

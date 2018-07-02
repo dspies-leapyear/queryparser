@@ -1,5 +1,9 @@
 (Left
-   (UnintroducedTable
-      (QTableName{tableNameInfo = 22, tableNameSchema = Nothing,
-                  tableNameName = "z"})),
+   (MissingColumn
+      (QColumnName{columnNameInfo = 23,
+                   columnNameTable =
+                     Just
+                       (QTableName{tableNameInfo = 22, tableNameSchema = Nothing,
+                                   tableNameName = "z"}),
+                   columnNameName = "a"})),
  [])

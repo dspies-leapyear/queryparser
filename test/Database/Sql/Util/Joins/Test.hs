@@ -71,6 +71,13 @@ testJoins = test
                 )
             )
 
+        , testAll "SELECT 1 FROM foo as f JOIN bar ON f.a = bar.b;" defaultTestCatalog
+            (@=? S.singleton
+                ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
+                , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
+                )
+            )
+
         , testAll "SELECT 1 FROM (select * from foo) as f JOIN bar ON f.a = bar.b;" defaultTestCatalog
             (@=? S.singleton
                 ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
@@ -148,16 +155,6 @@ testJoins = test
         , testVertica "ALTER TABLE foo ADD PRIMARY KEY (bar);" defaultTestCatalog (@=? S.empty)
         , testVertica "ALTER PROJECTION foo RENAME TO bar;" defaultTestCatalog (@=? S.empty)
         , testAll "GRANT SELECT ON foo TO bar;" defaultTestCatalog (@=? S.empty)
-        , testHive "SELECT * FROM foo LEFT SEMI JOIN bar INNER JOIN bae ON (foo.a = bar.a) AND (foo.a = c);" defaultTestCatalog
-            (@=? S.fromList
-                [ ( (FullyQualifiedColumnName "default_db" "public" "bae" "c", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
-                  )
-                , ( (FullyQualifiedColumnName "default_db" "public" "bar" "a", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
-                  )
-                ]
-            )
         , testAll "SELECT * FROM foo JOIN bar ON true WHERE foo.a > bar.b;" defaultTestCatalog
             (@=? S.fromList
                 [ ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
@@ -172,36 +169,9 @@ testJoins = test
                   )
                 ]
             )
-        , testAll "SELECT * FROM foo JOIN bar ON true JOIN bae ON true WHERE foo.a IN (bar.b * 2, bae.c + 1);" defaultTestCatalog
-            (@=? S.fromList
-                [ ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
-                  )
-                , ( (FullyQualifiedColumnName "default_db" "public" "bae" "c", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
-                  )
-                , ( (FullyQualifiedColumnName "default_db" "public" "bae" "c", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
-                  )
-                ]
-            )
         , testVertica "SELECT * FROM foo WHERE foo.a IN (SELECT b from bar);" defaultTestCatalog
             (@=? S.fromList
                 [ ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
-                  )
-                ]
-            )
-        , testHive "SELECT * FROM foo JOIN bar ON foo.a.field = bar.b.field;" defaultTestCatalog
-            (@=? S.fromList
-                [ ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [StructFieldName () "field"])
-                  , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [StructFieldName () "field"])
-                  )
-                ]
-            )
-        , testHive "SELECT * FROM foo JOIN bar ON foo.a = bar.b.field1.field2;" defaultTestCatalog
-            (@=? S.fromList
-                [ ( (FullyQualifiedColumnName "default_db" "public" "bar" "b", [StructFieldName () "field1", StructFieldName () "field2"])
                   , (FullyQualifiedColumnName "default_db" "public" "foo" "a", [])
                   )
                 ]

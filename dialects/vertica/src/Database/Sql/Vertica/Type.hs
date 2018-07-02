@@ -307,10 +307,10 @@ decomposeMerge Merge{..} = fromList $ catMaybes [ fmap mkInsert mergeInsertDirec
     r :: a
     r = mergeInfo
 
-    toAliases :: Maybe (TableAlias a) -> OptionalTablishAliases a
+    toAliases :: Maybe (TableAlias a) -> RTablishAliases a
     toAliases mAlias = case mAlias of
-        Just alias -> TablishAliasesT alias
-        Nothing -> TablishAliasesNone
+        Just alias -> error "not dealing with MERGE now" alias
+        Nothing -> error "not dealing with MERGE now"
 
     makeExprAlias :: Expr ResolvedNames a -> [ColumnAlias a]
     makeExprAlias = const []
@@ -332,7 +332,7 @@ decomposeMerge Merge{..} = fromList $ catMaybes [ fmap mkInsert mergeInsertDirec
 
             selectCols = SelectColumns r $ map toSelectExpr $ toList insertVals
             selectFrom =
-                let join' = TablishJoin r (JoinInner r) (JoinOn $ UnOpExpr r "NOT" mergeCondition) lhs rhs
+                let join' = TablishJoin r (error "not dealing with MERGE now") (JoinInner r) (JoinOn $ UnOpExpr r "NOT" mergeCondition) lhs rhs
                  in Just $ SelectFrom r [join']
             selectWhere = Nothing
             selectTimeseries = Nothing
@@ -354,7 +354,7 @@ decomposeMerge Merge{..} = fromList $ catMaybes [ fmap mkInsert mergeInsertDirec
             updateTable = mergeTargetTable
             updateAlias = mergeTargetAlias
             updateSetExprs = setExprs
-            updateFrom = Just $ TablishJoin r (JoinInner r) (JoinOn mergeCondition) lhs rhs
+            updateFrom = Just $ TablishJoin r (error "not dealing with MERGE now") (JoinInner r) (JoinOn mergeCondition) lhs rhs
             updateWhere = Nothing
          in UpdateStmt Update{..}
 
@@ -461,23 +461,23 @@ resolveVerticaStatement (VerticaMergeStatement Merge{..}) = do
                                                                }) uqcns
         tgtColRefs = mkColRefs (columnsList tSchemaMember) tFqtn
         tgtColSet = case mergeTargetAlias of
-            Just alias -> (Just $ RTableAlias alias, tgtColRefs)
-            Nothing -> (Just $ RTableRef tFqtn tSchemaMember, tgtColRefs)
+            Just alias -> makeColumnSet (Just $ RTableAlias alias (error "not dealing with MERGE now")) tgtColRefs
+            Nothing -> makeColumnSet (Just $ RTableRef tFqtn tSchemaMember) tgtColRefs
         srcColRefs = mkColRefs (columnsList sSchemaMember) sFqtn
         srcColSet = case mergeSourceAlias of
-            Just alias -> (Just $ RTableAlias alias, srcColRefs)
-            Nothing -> (Just $ RTableRef sFqtn sSchemaMember, srcColRefs)
+            Just alias -> makeColumnSet (Just $ RTableAlias alias (error "not dealing with MERGE now")) srcColRefs
+            Nothing -> makeColumnSet (Just $ RTableRef sFqtn sSchemaMember) srcColRefs
 
-    mergeCondition' <- bindColumns [srcColSet, tgtColSet] $ resolveExpr mergeCondition
+    mergeCondition' <- bindColumns srcColSet $ bindColumns tgtColSet $ resolveExpr mergeCondition
 
     let resolveColRef oqcn = RColumnRef $ oqcn { columnNameTable = Identity tFqtn }
         resolveSetExpr (oqcn, expr) = do
             expr' <- resolveDefaultExpr expr
             return (resolveColRef oqcn, expr')
-    mergeUpdateDirective' <- bindColumns [srcColSet] $ mapM (mapM resolveSetExpr) mergeUpdateDirective
+    mergeUpdateDirective' <- bindColumns srcColSet $ mapM (mapM resolveSetExpr) mergeUpdateDirective
 
     let mergeInsertDirectiveColumns' = fmap (fmap resolveColRef) mergeInsertDirectiveColumns
-    mergeInsertDirectiveValues' <- bindColumns [srcColSet] $ mapM (mapM resolveDefaultExpr) mergeInsertDirectiveValues
+    mergeInsertDirectiveValues' <- bindColumns srcColSet $ mapM (mapM resolveDefaultExpr) mergeInsertDirectiveValues
 
     pure $ VerticaMergeStatement Merge
         { mergeTargetTable = mergeTargetTable'

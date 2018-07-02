@@ -449,25 +449,6 @@ testColumnLineage = test
               ]
           )
 
-        , testHive "INSERT OVERWRITE TABLE foo SELECT a.x.y FROM bar;" defaultTestCatalog
-          (@?= M.fromList
-              [ ( Left $ FullyQualifiedTableName "default_db" "public" "foo"
-                , singleTableSet Range{start = Position 1 45 45, end = Position 1 48 48}
-                    $ FullyQualifiedTableName "default_db" "public" "bar"
-                )
-              , ( Right $ FullyQualifiedColumnName "default_db" "public" "foo" "a"
-                , mempty
-                    { columnPlusColumns = M.singleton (FullyQualifiedColumnName "default_db" "public" "bar" "a")
-                        $ M.singleton 
-                            ( FieldChain $ M.singleton (StructFieldName () "x")
-                                $ FieldChain $ M.singleton (StructFieldName () "y")
-                                    $ FieldChain M.empty
-                            )
-                            ( S.singleton Range{start = Position 1 34 34, end = Position 1 37 37} )
-                    }
-                )
-              ]
-          )
         , testVertica "CREATE TABLE baz AS (SELECT a LIKE b as c FROM bar);"
               defaultTestCatalog
               (@?= M.fromList
@@ -490,6 +471,7 @@ testColumnLineage = test
                   ]
               )
         ]
+    , "finished: Generate column lineages for parsed queries" ~: [ pure () :: IO () ]
     ]
 
 type DefaultCatalogType =

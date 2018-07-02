@@ -44,7 +44,7 @@ parse sql = case void <$> VP.parse sql of
 
 -- and construct a catalog, with tables `foo` (columns a, b, and c) and `bar` (columns x, y, and z)
 catalog :: Catalog
-catalog = makeDefaultingCatalog catalogMap [defaultSchema] defaultDatabase
+catalog = makeCatalog catalogMap [defaultSchema] defaultDatabase
   where
     defaultDatabase :: DatabaseName ()
     defaultDatabase = DatabaseName () "defaultDatabase"

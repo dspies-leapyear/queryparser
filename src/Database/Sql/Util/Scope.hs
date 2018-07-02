@@ -22,6 +22,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Database.Sql.Util.Scope
@@ -41,13 +43,16 @@ module Database.Sql.Util.Scope
     , selectionNames, mkTableSchemaMember
     ) where
 
-import Prelude hiding ((&&), (||), not)
-import Data.Predicate.Class
-import Data.Maybe (mapMaybe)
+import Prelude
+import Data.List (foldl')
+import Data.Set (Set)
+import qualified Data.Set as S
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Either (lefts, rights)
 import Data.Traversable (traverse)
 import Database.Sql.Type
 
+import qualified Data.HashMap.Strict as HMS
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text.Lazy as TL
 import           Data.Text.Lazy (Text)
@@ -58,7 +63,7 @@ import Control.Monad.Writer
 import Control.Monad.Except
 import Control.Monad.Identity
 
-import Control.Arrow (first, (&&&))
+import Control.Arrow ((&&&))
 
 import Data.Proxy (Proxy (..))
 
@@ -77,8 +82,12 @@ makeResolverInfo dialect catalog = ResolverInfo
 
 makeColumnAlias :: a -> Text -> Resolver ColumnAlias a
 makeColumnAlias r alias = ColumnAlias r alias . ColumnAliasId <$> getNextCounter
-  where
-    getNextCounter = modify (subtract 1) >> get
+
+makeTableAlias :: a -> Text -> Resolver TableAlias a
+makeTableAlias r alias = TableAlias r alias . TableAliasId <$> getNextCounter
+
+getNextCounter :: Monad m => StateT Integer m Integer
+getNextCounter = modify (subtract 1) >> get
 
 runResolverWarn :: Dialect d => Resolver r a -> Proxy d -> Catalog -> (Either (ResolutionError a) (r a), [Either (ResolutionError a) (ResolutionSuccess a)])
 runResolverWarn resolver dialect catalog = runWriter $ runExceptT $ runReaderT (evalStateT resolver 0) $ makeResolverInfo dialect catalog
@@ -129,25 +138,19 @@ resolveQueryWithColumns (QuerySelect info select) = do
 resolveQueryWithColumns (QueryExcept info Unused lhs rhs) = do
     WithColumns lhs' columns <- resolveQueryWithColumns lhs
     rhs' <- resolveQuery rhs
-    cs <- forM (queryColumnNames lhs') $ \case
-        RColumnRef QColumnName{..} -> makeColumnAlias columnNameInfo columnNameName
-        RColumnAlias (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
+    cs <- forM (queryColumnNames lhs') $ \ (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
     pure $ WithColumns (QueryExcept info (ColumnAliasList cs) lhs' rhs') columns
 
 resolveQueryWithColumns (QueryUnion info distinct Unused lhs rhs) = do
     WithColumns lhs' columns <- resolveQueryWithColumns lhs
     rhs' <- resolveQuery rhs
-    cs <- forM (queryColumnNames lhs') $ \case
-        RColumnRef QColumnName{..} -> makeColumnAlias columnNameInfo columnNameName
-        RColumnAlias (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
+    cs <- forM (queryColumnNames lhs') $ \ (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
     pure $ WithColumns (QueryUnion info distinct (ColumnAliasList cs) lhs' rhs') columns
 
 resolveQueryWithColumns (QueryIntersect info Unused lhs rhs) = do
     WithColumns lhs' columns <- resolveQueryWithColumns lhs
     rhs' <- resolveQuery rhs
-    cs <- forM (queryColumnNames lhs') $ \case
-        RColumnRef QColumnName{..} -> makeColumnAlias columnNameInfo columnNameName
-        RColumnAlias (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
+    cs <- forM (queryColumnNames lhs') $ \ (ColumnAlias aliasInfo name _) -> makeColumnAlias aliasInfo name
     pure $ WithColumns (QueryIntersect info (ColumnAliasList cs) lhs' rhs') columns
 
 resolveQueryWithColumns (QueryWith info [] query) = overWithColumns (QueryWith info []) <$> resolveQueryWithColumns query
@@ -165,76 +168,45 @@ resolveQueryWithColumns (QueryWith info (cte:ctes) query) = do
     WithColumns (QueryWith _ ctes' query') columns <- updateBindings $ resolveQueryWithColumns $ QueryWith info ctes query
     pure $ WithColumns (QueryWith info (cte':ctes') query') columns
 
-resolveQueryWithColumns (QueryOrder info orders query) = do
-    WithColumns query' columns <- resolveQueryWithColumns query
+resolveQueryWithColumns (QueryOrder info orders query) =
+    case query of
+        QuerySelect i select -> do
+            WithColumnsAndOrders select' columns orders' <- resolveSelectAndOrders select orders
+            pure $ WithColumns (QueryOrder info orders' (QuerySelect i select')) columns
 
-    ResolvedOrders orders' <- resolveOrders query orders
-
-    pure $ WithColumns (QueryOrder info orders' query') columns
+        _ -> do
+            WithColumns query' columns <- resolveQueryWithColumns query
+            let names = queryColumnNames query'
+                exprs = map (ColumnExpr info . RColumnAlias) names
+            orders' <- bindAliasedColumns names $ mapM (resolveOrder exprs) orders
+            pure $ WithColumns (QueryOrder info orders' query') columns
 
 resolveQueryWithColumns (QueryLimit info limit query) = overWithColumns (QueryLimit info limit) <$> resolveQueryWithColumns query
 resolveQueryWithColumns (QueryOffset info offset query) = overWithColumns (QueryOffset info offset) <$> resolveQueryWithColumns query
-
-
-newtype ResolvedOrders a = ResolvedOrders [Order ResolvedNames a]
-
-resolveOrders :: Query RawNames a -> [Order RawNames a] -> Resolver ResolvedOrders a
-resolveOrders query orders = case query of
-    QuerySelect _ s -> do
-        -- dispatch to dialect specific binding rules :)
-        WithColumnsAndOrders _ _ os <- resolveSelectAndOrders s orders
-        pure $ ResolvedOrders os
-    q@(QueryExcept _ _ _ _) -> do
-        q'@(QueryExcept _ (ColumnAliasList cs) _ _) <- resolveQuery q
-        let exprs = map (\ c@(ColumnAlias info _ _) -> ColumnExpr info $ RColumnAlias c) cs
-        bindAliasedColumns (queryColumnNames q') $ ResolvedOrders <$> mapM (resolveOrder exprs) orders
-    q@(QueryUnion _ _ _ _ _) -> do
-        q'@(QueryUnion _ _ (ColumnAliasList cs) _ _) <- resolveQuery q
-        let exprs = map (\ c@(ColumnAlias info _ _) -> ColumnExpr info $ RColumnAlias c) cs
-        bindAliasedColumns (queryColumnNames q') $ ResolvedOrders <$> mapM (resolveOrder exprs) orders
-    q@(QueryIntersect _ _ _ _) -> do
-        q'@(QueryIntersect _ (ColumnAliasList cs) _ _) <- resolveQuery q
-        let exprs = map (\ c@(ColumnAlias info _ _) -> ColumnExpr info $ RColumnAlias c) cs
-        bindAliasedColumns (queryColumnNames q') $ ResolvedOrders <$> mapM (resolveOrder exprs) orders
-    QueryWith _ _ _ -> error "unexpected AST: QueryOrder enclosing QueryWith"
-    QueryOrder _ _ q -> do
-        -- this case (nested orders) is possible in presto, but not vertica or hive
-        resolveOrders q orders
-    QueryLimit _ _ q -> resolveOrders q orders
-    QueryOffset _ _ q -> resolveOrders q orders
-
 
 bindCTE :: CTE ResolvedNames a -> Bindings a -> Bindings a
 bindCTE CTE{..} =
     let columns =
             case cteColumns of
                 [] -> queryColumnNames cteQuery
-                cs -> map RColumnAlias cs
+                cs -> cs
         cte = (cteAlias, columns)
      in \ Bindings{..} -> Bindings{boundCTEs = cte:boundCTEs, ..}
 
 
-selectionNames :: Selection ResolvedNames a -> [RColumnRef a]
-selectionNames (SelectExpr _ [alias] (ColumnExpr _ ref)) =
-    let refName = case ref of
-            RColumnRef (QColumnName _ _ name) -> name
-            RColumnAlias (ColumnAlias _ name _) -> name
-        ColumnAlias _ aliasName _ = alias
-     in if (refName == aliasName) then [ref] else [RColumnAlias alias]
-selectionNames (SelectExpr _ aliases _) = map RColumnAlias aliases
-selectionNames (SelectStar _ _ (StarColumnNames referents)) = referents
-
+selectionNames :: Selection ResolvedNames a -> [ColumnAlias a]
+selectionNames (SelectExpr _ aliases _) = aliases
+selectionNames (SelectStar _ _ (StarColumnNames referents)) = map snd referents
 
 selectionExprs :: Selection ResolvedNames a -> [Expr ResolvedNames a]
 selectionExprs (SelectExpr info aliases _) = map (ColumnExpr info . RColumnAlias) aliases
-selectionExprs (SelectStar info _ (StarColumnNames referents)) = map (ColumnExpr info) referents
+selectionExprs (SelectStar info _ (StarColumnNames referents)) = map (ColumnExpr info . RColumnAlias . snd) referents
 
-
-queryColumnNames :: Query ResolvedNames a -> [RColumnRef a]
+queryColumnNames :: Query ResolvedNames a -> [ColumnAlias a]
 queryColumnNames (QuerySelect _ Select{selectCols = SelectColumns _ cols}) = cols >>= selectionNames
-queryColumnNames (QueryExcept _ (ColumnAliasList cs) _ _) = map RColumnAlias cs
-queryColumnNames (QueryUnion _ _ (ColumnAliasList cs) _ _) = map RColumnAlias cs
-queryColumnNames (QueryIntersect _ (ColumnAliasList cs) _ _) = map RColumnAlias cs
+queryColumnNames (QueryExcept _ (ColumnAliasList cs) _ _) = cs
+queryColumnNames (QueryUnion _ _ (ColumnAliasList cs) _ _) = cs
+queryColumnNames (QueryIntersect _ (ColumnAliasList cs) _ _) = cs
 queryColumnNames (QueryWith _ _ query) = queryColumnNames query
 queryColumnNames (QueryOrder _ _ query) = queryColumnNames query
 queryColumnNames (QueryLimit _ _ query) = queryColumnNames query
@@ -243,7 +215,7 @@ queryColumnNames (QueryOffset _ _ query) = queryColumnNames query
 resolveSelectAndOrders :: Select RawNames a -> [Order RawNames a] -> Resolver (WithColumnsAndOrders (Select ResolvedNames)) a
 resolveSelectAndOrders Select{..} orders = do
     (selectFrom', columns) <- traverse resolveSelectFrom selectFrom >>= \case
-        Nothing -> pure (Nothing, [])
+        Nothing -> pure (Nothing, emptyColumnSet)
         Just (WithColumns selectFrom' columns) -> pure (Just selectFrom', columns)
 
     selectTimeseries' <- traverse (bindColumns columns . resolveSelectTimeseries) selectTimeseries
@@ -273,7 +245,7 @@ resolveSelectAndOrders Select{..} orders = do
         pure $ WithColumnsAndOrders select columns orders'
   where
     maybeBindTimeSlice Nothing = id
-    maybeBindTimeSlice (Just timeseries) = bindColumns [(Nothing, [RColumnAlias $ selectTimeseriesSliceName timeseries])]
+    maybeBindTimeSlice (Just timeseries) = bindColumns $ makeColumnSet Nothing [RColumnAlias $ selectTimeseriesSliceName timeseries]
 
 
 resolveCTE :: CTE RawNames a -> Resolver (CTE ResolvedNames) a
@@ -314,18 +286,22 @@ resolveUpdate Update{..} = do
         tgtColRefs = map (\uqcn -> RColumnRef $ uqcn { columnNameInfo = tableNameInfo fqtn
                                                      , columnNameTable = Identity fqtn
                                                      }) uqcns
-        tgtColSet = case updateAlias of
-            Just alias -> (Just $ RTableAlias alias, tgtColRefs)
-            Nothing -> (Just $ RTableRef fqtn schemaMember, tgtColRefs)
+
+    tgtColAliases <- mapM (freshAliasForColumnRef updateInfo) tgtColRefs
+    let tgtColSet = case updateAlias of
+            Just alias -> makeColumnSet (Just $ RTableAlias alias tgtColAliases) tgtColRefs
+            Nothing -> makeColumnSet (Just $ RTableRef fqtn schemaMember) tgtColRefs
 
     (updateFrom', srcColSet) <- case updateFrom of
-        Just tablish -> resolveTablish tablish >>= (\ (WithColumns t cs) -> return (Just t, cs))
-        Nothing -> return (Nothing, [])
+        Just tablish -> do
+            WithColumns t cs <- resolveTablish tablish
+            pure (Just t, cs)
+        Nothing -> return (Nothing, emptyColumnSet)
 
     updateSetExprs' <- bindColumns srcColSet $
         mapM (\(uqcn, expr) -> (RColumnRef uqcn { columnNameTable = Identity fqtn},) <$> resolveDefaultExpr expr) updateSetExprs
 
-    updateWhere' <- bindColumns (tgtColSet:srcColSet) $ mapM resolveExpr updateWhere
+    updateWhere' <- bindColumns (joinColumnSets tgtColSet srcColSet) $ mapM resolveExpr updateWhere
 
     pure $ Update
         { updateTable = updateTable'
@@ -340,7 +316,8 @@ resolveDelete (Delete info tableName expr) = do
     tableName'@(RTableName fqtn table@SchemaMember{..}) <- resolveTableName tableName
     when (tableType /= Table) $ fail $ "delete only works on tables; can't delete on a " ++ show tableType
     let QTableName tableInfo _ _ = tableName
-    bindColumns [(Just $ RTableRef fqtn table, map (\ (QColumnName () None column) -> RColumnRef $ QColumnName tableInfo (pure fqtn) column) columnsList)] $ do
+        columnSet = makeColumnSet (Just $ RTableRef fqtn table) $ map (\ (QColumnName () None column) -> RColumnRef $ QColumnName tableInfo (pure fqtn) column) columnsList
+    bindColumns columnSet $ do
         expr' <- traverse resolveExpr expr
         pure $ Delete info tableName' expr'
 
@@ -379,7 +356,7 @@ resolveTableDefinition fqtn (TableColumns info cs) = do
     cs' <- mapM resolveColumnOrConstraint cs
     let columns = mapMaybe columnOrConstraintToColumn $ NonEmpty.toList cs'
         table = mkTableSchemaMember $ map (\ c -> c{columnNameInfo = (), columnNameTable = None}) columns
-    pure $ WithColumns (TableColumns info cs') [(Just $ RTableRef fqtn table, map RColumnRef columns)]
+    pure $ WithColumns (TableColumns info cs') $ makeColumnSet (Just $ RTableRef fqtn table) $ map RColumnRef columns
   where
     columnOrConstraintToColumn (ColumnOrConstraintConstraint _) = Nothing
     columnOrConstraintToColumn (ColumnOrConstraintColumn ColumnDefinition{columnDefinitionName = QColumnName columnInfo None name}) =
@@ -388,22 +365,21 @@ resolveTableDefinition fqtn (TableColumns info cs) = do
 
 resolveTableDefinition _ (TableLike info name) = do
     name' <- resolveTableName name
-    pure $ WithColumns (TableLike info name') []
+    pure $ WithColumns (TableLike info name') emptyColumnSet
 
 resolveTableDefinition fqtn (TableAs info cols query) = do
     query' <- resolveQuery query
     let columns = queryColumnNames query'
         table = mkTableSchemaMember $ map toUQCN columns
-        toUQCN (RColumnRef fqcn) = fqcn{columnNameInfo = (), columnNameTable = None}
-        toUQCN (RColumnAlias (ColumnAlias _ cn _)) = QColumnName{..}
+        toUQCN (ColumnAlias _ cn _) = QColumnName{..}
           where
             columnNameInfo = ()
             columnNameName = cn
             columnNameTable = None
-    pure $ WithColumns (TableAs info cols query') [(Just $ RTableRef fqtn table, columns)]
+    pure $ WithColumns (TableAs info cols query') $ makeColumnSet (Just $ RTableRef fqtn table) $ map RColumnAlias columns
 
 resolveTableDefinition _ (TableNoColumnInfo info) = do
-    pure $ WithColumns (TableNoColumnInfo info) []
+    pure $ WithColumns (TableNoColumnInfo info) emptyColumnSet
 
 
 resolveColumnOrConstraint :: ColumnOrConstraint d RawNames a -> Resolver (ColumnOrConstraint d ResolvedNames) a
@@ -492,31 +468,20 @@ resolveSelectColumns :: SelectColumns RawNames a -> Resolver (SelectColumns Reso
 resolveSelectColumns (SelectColumns info selections) = SelectColumns info <$> mapM resolveSelection selections
 
 
-qualifiedOnly :: [(Maybe a, b)] -> [(a, b)]
-qualifiedOnly = mapMaybe (\(mTable, cs) -> case mTable of
-                              (Just t) -> Just (t, cs)
-                              Nothing -> Nothing)
-
 resolveSelection :: Selection RawNames a -> Resolver (Selection ResolvedNames) a
 resolveSelection (SelectStar info Nothing Unused) = do
-    columns <- asks (boundColumns . bindings)
-    pure $ SelectStar info Nothing $ StarColumnNames $ map (const info <$>) $ snd =<< columns
+    ColumnSet{..} <- asks (boundColumns . bindings)
+    relationAliases <- mapM (freshAliasForColumnRef info) relationColumns
+    pure $ SelectStar info Nothing $ StarColumnNames $ zip (map (const info <$>) relationColumns) relationAliases
 
-resolveSelection (SelectStar info (Just oqtn@(QTableName _ (Just schema) _)) Unused) = do
-    columns <- asks (boundColumns . bindings)
-    let qualifiedColumns = qualifiedOnly columns
-    case filter ((resolvedTableHasSchema schema && resolvedTableHasName oqtn) . fst) qualifiedColumns of
-        [] -> throwError $ UnintroducedTable oqtn
-        [(t, cs)] -> pure $ SelectStar info (Just t) $ StarColumnNames $ map (const info <$>) cs
-        _ -> throwError $ AmbiguousTable oqtn
-
-resolveSelection (SelectStar info (Just oqtn@(QTableName tableInfo Nothing table)) Unused) = do
-    columns <- asks (boundColumns . bindings)
-    let qualifiedColumns = qualifiedOnly columns
-    case filter (resolvedTableHasName oqtn . fst) qualifiedColumns of
-        [] -> throwError $ UnintroducedTable $ QTableName tableInfo Nothing table
-        [(t, cs)] -> pure $ SelectStar info (Just t) $ StarColumnNames $ map (const info <$>) cs
-        _ -> throwError $ AmbiguousTable $ QTableName tableInfo Nothing table
+resolveSelection (SelectStar info (Just oqtn) Unused) = do
+    ColumnSet{..} <- asks (boundColumns . bindings)
+    case HMS.lookup (void oqtn) subrelations of
+        Nothing -> throwError $ UnintroducedTable oqtn
+        Just (Left _) -> throwError $ AmbiguousTable oqtn
+        Just (Right (t, cs)) -> do
+            as <- mapM (freshAliasForColumnRef info) cs
+            pure $ SelectStar info (Just t) $ StarColumnNames $ zip (map (const info <$>) cs) as
 
 resolveSelection (SelectExpr info alias expr) = SelectExpr info alias <$> resolveExpr expr
 
@@ -669,32 +634,58 @@ resolveSelectFrom :: SelectFrom RawNames a -> Resolver (WithColumns (SelectFrom 
 resolveSelectFrom (SelectFrom info tablishes) = do
     tablishesWithColumns <- mapM resolveTablish tablishes
     let (tablishes', css) = unzip $ map (\ (WithColumns t cs) -> (t, cs)) tablishesWithColumns
-    pure $ WithColumns (SelectFrom info tablishes') $ concat css
+    pure $ WithColumns (SelectFrom info tablishes') $ foldl' joinColumnSets emptyColumnSet css
 
+
+freshAliasForColumnRef :: a -> RColumnRef a -> Resolver ColumnAlias a
+freshAliasForColumnRef info = \case
+  RColumnAlias (ColumnAlias _ name _) -> makeColumnAlias info name
+  RColumnRef (QColumnName _ _ name) -> makeColumnAlias info name
+
+reuseAliasForTableRef :: a -> RTableRef a -> Resolver TableAlias a
+reuseAliasForTableRef info = \case
+  RTableAlias (TableAlias _ name ident) _ -> pure $ TableAlias info name ident
+  RTableRef (QTableName _ _ name) _ -> makeTableAlias info name
 
 resolveTablish :: forall a . Tablish RawNames a -> Resolver (WithColumns (Tablish ResolvedNames)) a
-resolveTablish (TablishTable info aliases name) = do
-    WithColumns name' columns <- resolveTableRef name
+resolveTablish (TablishTable info aliases ref) = do
+    WithColumns ref' ColumnSet{..} <- resolveTableRef ref
 
-    let columns' = case aliases of
-            TablishAliasesNone -> columns
-            TablishAliasesT t -> map (first $ const $ Just $ RTableAlias t) columns
-            TablishAliasesTC t cs -> [(Just $ RTableAlias t, map RColumnAlias cs)]
+    (tableAlias, tableName, columnAliases) <-
+        case aliases of
+            TablishAliasesNone -> do
+                t' <- reuseAliasForTableRef info ref'
+                cs' <- mapM (freshAliasForColumnRef info) relationColumns
+                pure (t', ref', cs')
+            TablishAliasesT t -> do
+                cs' <- mapM (freshAliasForColumnRef info) relationColumns
+                pure (t, RTableAlias t cs', cs')
+            TablishAliasesTC t cs -> pure (t, RTableAlias t cs, cs)
 
-    pure $ WithColumns (TablishTable info aliases name') columns'
+    let aliases' = RTablishAliases (Right tableAlias) columnAliases
+
+    pure $ WithColumns (TablishTable info aliases' ref') $ makeColumnSet (Just tableName) $ map RColumnAlias columnAliases
 
 
 resolveTablish (TablishSubQuery info aliases query) = do
     query' <- resolveQuery query
     let columns = queryColumnNames query'
-        (tAlias, cAliases) = case aliases of
-            TablishAliasesNone -> (Nothing, columns)
-            TablishAliasesT t -> (Just $ RTableAlias t, columns)
-            TablishAliasesTC t cs -> (Just $ RTableAlias t, map RColumnAlias cs)
+    (tAlias, cAliases) <-
+        case aliases of
+            TablishAliasesNone -> do
+                subqueryAliasId <- TableAliasId <$> getNextCounter
+                pure (Left subqueryAliasId, columns)
+            TablishAliasesT t -> do
+                pure (Right t, columns)
+            TablishAliasesTC t cs -> pure (Right t, cs)
 
-    pure $ WithColumns (TablishSubQuery info aliases query') [(tAlias, cAliases)]
+    let tableAlias = case tAlias of
+            Left _ -> Nothing
+            Right alias -> Just $ RTableAlias alias cAliases
 
-resolveTablish (TablishJoin info joinType cond lhs rhs) = do
+    pure $ WithColumns (TablishSubQuery info (RTablishAliases tAlias cAliases) query') $ makeColumnSet tableAlias $ map RColumnAlias cAliases
+
+resolveTablish (TablishJoin info Unused joinType cond lhs rhs) = do
     WithColumns lhs' lcolumns <- resolveTablish lhs
 
     -- special case for Presto
@@ -704,20 +695,21 @@ resolveTablish (TablishJoin info joinType cond lhs rhs) = do
           _ -> id
 
     WithColumns rhs' rcolumns <- bindForRhs $ resolveTablish rhs
-    let colsForRestOfQuery = case joinType of
-          -- for LEFT SEMI JOIN (Hive), the rhs is only in scope in the expr, nowhere else in the query
-          JoinSemi _ -> lcolumns
-          _ -> lcolumns ++ rcolumns
-    bindColumns (lcolumns ++ rcolumns) $ do
-        cond' <- resolveJoinCondition cond lcolumns rcolumns
-        pure $ WithColumns (TablishJoin info joinType cond' lhs' rhs') $ colsForRestOfQuery
+
+    joinAliasId <- TableAliasId <$> getNextCounter
+
+    WithColumnsAndAliases cond' columns' columnAliases <- resolveJoinCondition info joinType lcolumns rcolumns cond
+
+    let aliases' = RTablishAliases (Left joinAliasId) columnAliases
+
+    pure $ WithColumns (TablishJoin info aliases' joinType cond' lhs' rhs') columns'
 
 resolveTablish (TablishLateralView info aliases LateralView{..} lhs) = do
     (lhs', lcolumns) <- case lhs of
-        Nothing -> return (Nothing, [])
+        Nothing -> return (Nothing, emptyColumnSet)
         Just tablish -> do
-                            WithColumns lhs' lcolumns <- resolveTablish tablish
-                            return (Just lhs', lcolumns)
+            WithColumns lhs' lcolumns <- resolveTablish tablish
+            return (Just lhs', lcolumns)
 
     bindColumns lcolumns $ do
         lateralViewExprs' <- mapM resolveExpr lateralViewExprs
@@ -726,13 +718,22 @@ resolveTablish (TablishLateralView info aliases LateralView{..} lhs) = do
                 , ..
                 }
 
-        defaultCols <- map RColumnAlias . concat <$> mapM defaultAliases lateralViewExprs'
-        let rcolumns = case aliases of
-                TablishAliasesNone -> [(Nothing, defaultCols)]
-                TablishAliasesT t -> [(Just $ RTableAlias t, defaultCols)]
-                TablishAliasesTC t cs -> [(Just $ RTableAlias t, map RColumnAlias cs)]
+        defaultColAliases <- concat <$> mapM defaultAliases lateralViewExprs'
+        (tableAlias, columnAliases) <- case aliases of
+                TablishAliasesNone -> do
+                  lateralViewAliasId <- TableAliasId <$> getNextCounter
+                  pure (Left lateralViewAliasId, defaultColAliases)
+                TablishAliasesT t -> pure (Right t, defaultColAliases)
+                TablishAliasesTC t cs -> pure (Right t, cs)
 
-        pure $ WithColumns (TablishLateralView info aliases view lhs') $ lcolumns ++ rcolumns
+        let aliases' = RTablishAliases tableAlias columnAliases
+            rcolumns = [ viewColumns ]
+            viewColumns =
+                ( either (const Nothing) (Just . RTableAlias) tableAlias
+                , map RColumnAlias columnAliases
+                )
+
+        pure $ WithColumns (TablishLateralView info aliases' view lhs') $ error "not dealing with LATERAL VIEW now" lcolumns rcolumns
   where
     defaultAliases (FunctionExpr r (QFunctionName _ _ rawName) _ args _ _ _) = do
         let argsLessOne = (length args) - 1
@@ -763,34 +764,70 @@ resolveTablish (TablishLateralView info aliases LateralView{..} lhs) = do
 
     defaultAliases _ = fail "lateral view must have a FunctionExpr"
 
+realiasColumnSet :: a -> ColumnSet a -> Resolver (WithColumnsAndAliases Unused) a
+realiasColumnSet info ColumnSet{..} = do
+    aliases <- mapM (freshAliasForColumnRef info) relationColumns
+    let substitutions = HMS.fromList $ zip (map void relationColumns) aliases
+        substituteRef x = maybe x RColumnAlias $ HMS.lookup (void x) substitutions
+    pure $ WithColumnsAndAliases Unused
+        ColumnSet
+            { relationColumns = map RColumnAlias aliases
+            , subrelations = HMS.map (fmap $ fmap $ map substituteRef) subrelations
+            , columnsInScope = HMS.map (fmap substituteRef) columnsInScope
+            }
+        aliases
 
-resolveJoinCondition :: JoinCondition RawNames a -> ColumnSet a -> ColumnSet a -> Resolver (JoinCondition ResolvedNames) a
-resolveJoinCondition (JoinNatural info _) lhs rhs = do
-    let name (RColumnRef (QColumnName _ _ column)) = column
-        name (RColumnAlias (ColumnAlias _ alias _)) = alias
-        columns = RNaturalColumns $ do
-            l <- snd =<< lhs
-            r <- snd =<< rhs
-            if name l == name r
-             then [RUsingColumn l r]
-             else []
-    pure $ JoinNatural info columns
+resolveJoinCondition :: forall a. a -> JoinType a -> ColumnSet a -> ColumnSet a -> JoinCondition RawNames a -> Resolver (WithColumnsAndAliases (JoinCondition ResolvedNames)) a
+resolveJoinCondition joinInfo _ lhs rhs = \case  -- TODO fix semi-joins
+    JoinOn expr -> do
+        let baseColumns = joinColumnSets lhs rhs
+        expr' <- bindColumns baseColumns $ resolveExpr expr
+        WithColumnsAndAliases Unused columns aliases <- realiasColumnSet joinInfo baseColumns
+        pure $ WithColumnsAndAliases (JoinOn expr') columns aliases
+    JoinNatural info Unused -> do
+        let name (RColumnRef (QColumnName _ _ column)) = column
+            name (RColumnAlias (ColumnAlias _ alias _)) = alias
+            used = do
+                l <- relationColumns lhs
+                r <- relationColumns rhs
+                if name l == name r
+                 then [RUsingColumn l r]
+                 else []
+        (columns, aliases) <- joinUsing info used
+        pure $ WithColumnsAndAliases (JoinNatural info $ RNaturalColumns used) columns aliases
 
-resolveJoinCondition (JoinOn expr) _ _ = JoinOn <$> resolveExpr expr
-resolveJoinCondition (JoinUsing info cols) lhs rhs = JoinUsing info <$> mapM resolveColumn cols
+    JoinUsing info (map toOQCN -> using) -> do
+        ls <- bindColumns lhs $ mapM resolveColumnName using
+        rs <- bindColumns rhs $ mapM resolveColumnName using
+        let used = zipWith RUsingColumn ls rs
+        (columns, aliases) <- joinUsing info used
+        pure $ WithColumnsAndAliases (JoinUsing info used) columns aliases
   where
-    resolveColumn (QColumnName columnInfo _ column) = do
-        let resolveIn columns =
-                case filter hasName $ snd =<< columns of
-                    [] -> throwError $ MissingColumn $ QColumnName columnInfo Nothing column
-                    [c] -> pure c
-                    _ -> throwError $ AmbiguousColumn $ QColumnName columnInfo Nothing column
-            hasName (RColumnRef (QColumnName _ _ column')) = column' == column
-            hasName (RColumnAlias (ColumnAlias _ column' _)) = column' == column
-        l <- resolveIn lhs
-        r <- resolveIn rhs
-        pure $ RUsingColumn l r
+    toOQCN :: UQColumnName a -> OQColumnName a
+    toOQCN (QColumnName info None name) = QColumnName info Nothing name
 
+    remove :: (Functor f, Ord (f ())) => Set (f ()) -> [f a] -> [f a]
+    remove xs = filter (\ y -> not $ S.member (void y) xs)
+
+    joinUsing :: a -> [RUsingColumn a] -> StateT Integer (ReaderT (ResolverInfo a) (CatalogObjectResolver a)) (ColumnSet a, [ColumnAlias a])
+    joinUsing info used = do
+        let substitutions = HMS.fromList $ map (\ (RUsingColumn l r) -> (void r, l) ) used
+            (ls, rs) = unzip $ map (\ (RUsingColumn l r) -> (l, r)) used
+            lset = S.fromList $ map void ls
+            rset = S.fromList $ map void rs
+            substituteRef x = fromMaybe x $ HMS.lookup (void x) substitutions
+
+        WithColumnsAndAliases Unused columnSet aliases <- realiasColumnSet info ColumnSet
+              { relationColumns = ls ++ remove lset (relationColumns lhs) ++ remove rset (relationColumns rhs)
+              , subrelations = HMS.unionWith ambiguousTable (subrelations lhs) $ HMS.map (fmap $ fmap $ map substituteRef) (subrelations rhs)
+              , columnsInScope = HMS.unionWith ambiguousColumn (columnsInScope lhs) (columnsInScope rhs)
+              }
+
+        let shadowing = HMS.fromList $ map (\ alias@(ColumnAlias _ name _) -> (QColumnName () Nothing name, Right $ RColumnAlias alias)) aliases
+
+        pure ( columnSet { columnsInScope = HMS.union shadowing (columnsInScope columnSet) }
+             , aliases
+             )
 
 resolveSelectWhere :: SelectWhere RawNames a -> Resolver (SelectWhere ResolvedNames) a
 resolveSelectWhere (SelectWhere info expr) = SelectWhere info <$> resolveExpr expr
