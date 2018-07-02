@@ -19,7 +19,7 @@
                                                                                (ColumnAliasId 2)]
                                                                             (ColumnExpr 12
                                                                                (RColumnAlias
-                                                                                  (ColumnAlias 14
+                                                                                  (ColumnAlias 22
                                                                                      "x"
                                                                                      (ColumnAliasId
                                                                                         4))))]},
@@ -33,7 +33,8 @@
                       Just
                         (SelectFrom 15
                            [TablishSubQuery 16
-                              (TablishAliasesT (TableAlias 17 "foo" (TableAliasId 3)))
+                              (RTablishAliases (Right (TableAlias 17 "foo" (TableAliasId 3)))
+                                 [ColumnAlias 22 "x" (ColumnAliasId 4)])
                               (QuerySelect 18
                                  (Select{selectInfo = 19,
                                          selectCols =

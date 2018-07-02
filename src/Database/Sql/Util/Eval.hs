@@ -185,7 +185,7 @@ instance Evaluation e => Evaluate e (Select ResolvedNames Range) where
         having <- maybe pure (eval p) selectHaving groups
         records <- mapM (eval p selectCols) having
         let rows = recordSetItems =<< records
-            labels = map void $ selectionNames =<< selectColumnsList selectCols
+            labels = map (void . RColumnAlias) $ selectionNames =<< selectColumnsList selectCols
             indistinct = makeRecordSet p labels rows
 
         pure $ case selectDistinct of
@@ -207,18 +207,22 @@ appendRecordSets p (RecordSet cs rs :| sets) = makeRecordSet p cs <$> foldM (add
 
 instance Evaluation e => Evaluate e (Tablish ResolvedNames Range) where
     type EvalResult e (Tablish ResolvedNames Range) = EvalT e 'TableContext (EvalMonad e) (RecordSet e)
-    eval _ (TablishTable _ _ (RTableRef tableName table)) = asks evalFromTable <*> pure (RTableName tableName table) >>= \case
-        Nothing -> throwError $ "missing table: " ++ show (void tableName)
-        Just result -> pure result
-    eval _ (TablishTable _ _ (RTableAlias (TableAlias _ aliasName alias))) = asks (M.lookup alias . evalAliasMap) >>= \case
-        Nothing -> throwError $ "missing table alias: " ++ show aliasName
-        Just result -> pure result
+    eval _ (TablishTable _ (RTablishAliases _ columnAliases) ref) = do
+        RecordSet _ rs <- case ref of
+            RTableRef tableName table -> asks evalFromTable <*> pure (RTableName tableName table) >>= \case
+                Nothing -> throwError $ "missing table: " ++ show (void tableName)
+                Just result -> pure result
+            RTableAlias (TableAlias _ aliasName alias) _ -> asks (M.lookup alias . evalAliasMap) >>= \case
+                Nothing -> throwError $ "missing table alias: " ++ show aliasName
+                Just result -> pure result
+        pure $ RecordSet (map (RColumnAlias . void) columnAliases) rs
 
     eval p (TablishSubQuery _ _ query) = eval p query
-    eval p (TablishJoin _ joinType cond lhs rhs) = do
+    eval p (TablishJoin _ (RTablishAliases _ aliases) joinType cond lhs rhs) = do
         x <- eval p lhs
         y <- eval p rhs
-        handleJoin p joinType cond x y
+        rs <- handleJoin p joinType cond x y
+        pure $ makeRecordSet p (map (RColumnAlias . void) aliases) $ recordSetItems rs
 
     eval _ TablishLateralView{} = error "lateral view not yet supported"
 
@@ -267,7 +271,7 @@ makeRowMap = (M.fromList .) . zip
 instance Evaluation e => Evaluate e (SelectColumns ResolvedNames Range) where
     type EvalResult e (SelectColumns ResolvedNames Range) = RecordSet e -> EvalT e 'TableContext (EvalMonad e) (RecordSet e)
     eval p (SelectColumns _ columns) (RecordSet cs rs) = do
-        let cs' = map void $ selectionNames =<< columns
+        let cs' = map (void . RColumnAlias) $ selectionNames =<< columns
         rs' <- forM rs $ \ r -> do
             r' <- forM columns $ \ column ->
                 exprToTable (eval p column) $ makeRowMap cs r
@@ -318,7 +322,7 @@ instance Evaluation e => Evaluate e (Offset a) where
 instance Evaluation e => Evaluate e (Selection ResolvedNames Range) where
     type EvalResult e (Selection ResolvedNames Range) = EvalT e 'ExprContext (EvalMonad e) [EvalValue e]
     eval p (SelectExpr _ _ expr) = pure <$> eval p expr
-    eval p (SelectStar info _ (StarColumnNames cols)) = forM cols $ \ col ->
+    eval p (SelectStar info _ (StarColumnNames cols)) = forM cols $ \ (col, _) ->
         let expr :: Expr ResolvedNames Range
             expr = ColumnExpr info col
          in eval p expr

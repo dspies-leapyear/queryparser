@@ -1227,9 +1227,9 @@ tablishToTableAlias (TablishLateralView _ aliases _ _) = case aliases of
     TablishAliasesNone -> error "shouldn't happen in hive"
     TablishAliasesT (TableAlias _ name _) -> S.singleton name
     TablishAliasesTC (TableAlias _ name _) _ -> S.singleton name
-tablishToTableAlias (TablishJoin _ (JoinSemi _) _ lTablish _) =
+tablishToTableAlias (TablishJoin _ _ (JoinSemi _) _ lTablish _) =
     tablishToTableAlias lTablish
-tablishToTableAlias (TablishJoin _ _ _ lTablish rTablish) =
+tablishToTableAlias (TablishJoin _ _ _ _ lTablish rTablish) =
     tablishToTableAlias lTablish `S.union` tablishToTableAlias rTablish
 
 tableNameToTableAlias :: OQTableName Range -> Set Text
@@ -2284,7 +2284,7 @@ joinP = do
 
     let r lhs = getInfo lhs <> getInfo rhs <> getInfo condition
     return $ \ lhs ->
-        TablishJoin (r lhs) joinType' condition lhs rhs
+        TablishJoin (r lhs) Unused joinType' condition lhs rhs
 
 outerJoinTypeP :: Parser (JoinType Range)
 outerJoinTypeP = do

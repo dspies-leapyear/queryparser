@@ -1148,6 +1148,7 @@ testParser_hiveSuite = test
                             (SelectFrom (Range (Position 1 9 9) (Position 1 36 36))
                                [ TablishJoin
                                    (Range (Position 1 14 14) (Position 1 36 36))
+                                   Unused
                                    -- NB the lack of ON clause turned this LEFT SEMI JOIN to an INNER JOIN
                                    (JoinInner (Range (Position 1 18 18) (Position 1 32 32)))
                                    (JoinOn
@@ -1192,6 +1193,7 @@ testParser_hiveSuite = test
                           (SelectFrom (Range (Position 1 13 13) (Position 1 76 76))
                              [ TablishJoin
                                  (Range (Position 1 18 18) (Position 1 76 76))
+                                 Unused
                                  (JoinInner (Range (Position 1 41 41) (Position 1 51 51)))
                                  (JoinOn
                                     (BinOpExpr
@@ -1245,6 +1247,7 @@ testParser_hiveSuite = test
                                  )
                                  (TablishJoin
                                     (Range (Position 1 18 18) (Position 1 40 40))
+                                    Unused
                                     -- NB the lack of ON clause turned this LEFT SEMI JOIN to an INNER JOIN
                                     (JoinInner (Range (Position 1 22 22) (Position 1 36 36)))
                                     (JoinOn
@@ -1693,6 +1696,8 @@ testParser = test
                                                                     (Position 1 44 44))
                                 [ TablishJoin (Range (Position 1 16 16)
                                                      (Position 1 44 44))
+
+                                    Unused
 
                                     (JoinInner (Range (Position 1 20 20)
                                                       (Position 1 30 30)))

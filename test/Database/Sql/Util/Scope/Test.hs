@@ -167,8 +167,7 @@ testNoResolveErrors =
 
         , ticket "T541187" $
           map (parsesAndResolvesSuccessfullyHive (makeCatalog catalog path currentDatabase))
-            [ "SELECT * FROM foo LATERAL VIEW explode(col.field) foo;"  -- FROM
-            , "SELECT col.field, count(*) FROM foo GROUP BY col.field;" -- GROUP
+            [ "SELECT col.field, count(*) FROM foo GROUP BY col.field;" -- GROUP
             , TL.unlines -- HAVING
                 [ "SELECT col.field, count(*) FROM foo"
                 , "GROUP BY col.field HAVING count(DISTINCT col.field) > 1;"
@@ -189,11 +188,6 @@ testNoResolveErrors =
             , "SELECT        cAlias FROM (SELECT col FROM foo) AS tAlias (cAlias) ORDER BY        cAlias;"
             , "SELECT        cAlias FROM (SELECT col FROM foo) AS tAlias (cAlias) ORDER BY tAlias.cAlias;"
             , "SELECT tAlias.cAlias FROM (SELECT col FROM foo) AS tAlias (cAlias) ORDER BY tAlias.cAlias;"
-            , TL.unlines
-                [ "SELECT n"
-                , "FROM bar AS x (numbers)"
-                , "CROSS JOIN UNNEST(numbers) AS t (n);"
-                ]
             ]
         ]
 
@@ -286,7 +280,7 @@ testResolutionOnASTs = test
                             )
                             { selectFrom = Just
                                 ( SelectFrom 5
-                                    [ TablishJoin 6
+                                    [ TablishJoin 6 Unused
                                         ( JoinInner 7 )
                                         ( JoinUsing 8
                                             [ QColumnName 9 None "a" ]
@@ -320,7 +314,7 @@ testResolutionOnASTs = test
                             )
                             { selectFrom = Just
                                 ( SelectFrom 5
-                                    [ TablishJoin 7
+                                    [ TablishJoin 7 Unused
                                         ( JoinInner 8 )
                                         ( JoinNatural 6 Unused )
                                         ( TablishTable 9 TablishAliasesNone
@@ -339,33 +333,30 @@ testResolutionOnASTs = test
         ]
 
     , "test errors and warnings" ~:
-        [ "SELECT b FROM foo;" ~: ticket' "T406873"
-            [ assertFailure "no golden output - test hasn't passed yet" ]
-            [ testVertica "MISSINGCOL.broken" defaultTestCatalog
-                ( VerticaStandardSqlStatement
-                    ( QueryStmt
-                        ( QuerySelect 1
-                            ( makeSelect 2
-                                ( SelectColumns 3
-                                    [ SelectExpr 4
-                                        [ ColumnAlias 5 "b" ( ColumnAliasId 1 ) ]
-                                        ( ColumnExpr 6
-                                            ( QColumnName 7 Nothing "b" )
-                                        )
-                                    ]
-                                )
+        [ "SELECT b FROM foo;" ~: testVertica "MISSINGCOL" defaultTestCatalog
+            ( VerticaStandardSqlStatement
+                ( QueryStmt
+                    ( QuerySelect 1
+                        ( makeSelect 2
+                            ( SelectColumns 3
+                                [ SelectExpr 4
+                                    [ ColumnAlias 5 "b" ( ColumnAliasId 1 ) ]
+                                    ( ColumnExpr 6
+                                        ( QColumnName 7 Nothing "b" )
+                                    )
+                                ]
                             )
-                            { selectFrom = Just
-                                ( SelectFrom 8
-                                    [ TablishTable 9 TablishAliasesNone
-                                        ( QTableName 10 Nothing "foo" )
-                                    ]
-                                )
-                            }
                         )
+                        { selectFrom = Just
+                            ( SelectFrom 8
+                                [ TablishTable 9 TablishAliasesNone
+                                    ( QTableName 10 Nothing "foo" )
+                                ]
+                            )
+                        }
                     )
                 )
-            ]
+            )
         , "SELECT b FROM (SELECT 1 a) foo;" ~: testVertica "SUBQUERY" defaultTestCatalog
             ( VerticaStandardSqlStatement
                 ( QueryStmt
@@ -495,20 +486,20 @@ testResolutionOnASTs = test
                 )
             )
 
-        , "SELECT foo.x FROM foo, other.foo;" ~: testVertica "AMBIGUOUSTABLE" defaultTestCatalog
+        , "SELECT foo.a FROM foo, other.foo;" ~: testVertica "AMBIGUOUSTABLE" defaultTestCatalog
             ( VerticaStandardSqlStatement
                 ( QueryStmt
                     ( QuerySelect 1
                         ( makeSelect 2
                             ( SelectColumns 3
                                 [ SelectExpr 4
-                                    [ ColumnAlias 5 "x" ( ColumnAliasId 1 ) ]
+                                    [ ColumnAlias 5 "a" ( ColumnAliasId 1 ) ]
                                     ( ColumnExpr 6
                                         ( QColumnName 8
                                             ( Just
                                                 ( QTableName 7 Nothing "foo" )
                                             )
-                                            "x"
+                                            "a"
                                         )
                                     )
                                 ]
@@ -625,81 +616,78 @@ testResolutionOnASTs = test
                 )
             )
 
-        , ticket' "T405040"
-            [ assertFailure "no golden output - test hasn't passed yet" ]
-            [ testVertica "ALIASTABLE.broken" defaultTestCatalog -- "SELECT baz.x FROM bar AS baz;"
-                ( VerticaStandardSqlStatement
-                    ( QueryStmt
-                        ( QuerySelect 1
-                            ( makeSelect 2
-                                ( SelectColumns 3
-                                    [ SelectExpr 4
-                                        [ ColumnAlias 5 "x" ( ColumnAliasId 1 ) ]
-                                        ( ColumnExpr 6
-                                            ( QColumnName 8
-                                                ( Just
-                                                    ( QTableName 7 Nothing "baz" )
-                                                )
-                                                "x"
+        , "SELECT baz.a FROM bar AS baz;" ~: testVertica "ALIASTABLE" defaultTestCatalog
+            ( VerticaStandardSqlStatement
+                ( QueryStmt
+                    ( QuerySelect 1
+                        ( makeSelect 2
+                            ( SelectColumns 3
+                                [ SelectExpr 4
+                                    [ ColumnAlias 5 "a" ( ColumnAliasId 1 ) ]
+                                    ( ColumnExpr 6
+                                        ( QColumnName 8
+                                            ( Just
+                                                ( QTableName 7 Nothing "baz" )
                                             )
+                                            "a"
                                         )
-                                    ]
-                                )
+                                    )
+                                ]
                             )
-                            { selectFrom = Just
-                                ( SelectFrom 9
-                                    [ TablishTable 10
-                                        ( TablishAliasesT ( TableAlias 11 "baz" ( TableAliasId 2 ) ) )
-                                        ( QTableName 12 Nothing "bar" )
-                                    ]
-                                )
-                            }
                         )
+                        { selectFrom = Just
+                            ( SelectFrom 9
+                                [ TablishTable 10
+                                    ( TablishAliasesT ( TableAlias 11 "baz" ( TableAliasId 2 ) ) )
+                                    ( QTableName 12 Nothing "bar" )
+                                ]
+                            )
+                        }
                     )
                 )
+            )
 
-            , testVertica "SUBSELECTALIAS" defaultTestCatalog -- "SELECT baz.x FROM (SELECT * FROM bar) baz;"
-                ( VerticaStandardSqlStatement
-                    ( QueryStmt
-                        ( QuerySelect 1
-                            ( makeSelect 2
-                                ( SelectColumns 3
-                                    [ SelectExpr 4
-                                        [ ColumnAlias 5 "x" ( ColumnAliasId 1 ) ]
-                                        ( ColumnExpr 6
-                                            ( QColumnName 8
-                                                ( Just
-                                                    ( QTableName 7 Nothing "baz" )
-                                                )
-                                                "x"
+        , "SELECT baz.a FROM (SELECT * FROM bar) baz;" ~: testVertica "SUBSELECTALIAS" defaultTestCatalog
+            ( VerticaStandardSqlStatement
+                ( QueryStmt
+                    ( QuerySelect 1
+                        ( makeSelect 2
+                            ( SelectColumns 3
+                                [ SelectExpr 4
+                                    [ ColumnAlias 5 "a" ( ColumnAliasId 1 ) ]
+                                    ( ColumnExpr 6
+                                        ( QColumnName 8
+                                            ( Just
+                                                ( QTableName 7 Nothing "baz" )
                                             )
+                                            "a"
                                         )
-                                    ]
-                                )
+                                    )
+                                ]
                             )
-                            { selectFrom = Just
-                                ( SelectFrom 9
-                                    [ TablishSubQuery 10
-                                        ( TablishAliasesT ( TableAlias 11 "baz" ( TableAliasId 2 ) ) )
-                                        ( QuerySelect 12
-                                            ( makeSelect 13
-                                                ( SelectColumns 14
-                                                    [ SelectStar 15 Nothing Unused ]
-                                                )
-                                            )
-                                            { selectFrom = Just
-                                                ( SelectFrom 16
-                                                    [ TablishTable 17 TablishAliasesNone ( QTableName 18 Nothing "bar" ) ]
-                                                )
-                                            }
-                                        )
-                                    ]
-                                )
-                            }
                         )
+                        { selectFrom = Just
+                            ( SelectFrom 9
+                                [ TablishSubQuery 10
+                                    ( TablishAliasesT ( TableAlias 11 "baz" ( TableAliasId 2 ) ) )
+                                    ( QuerySelect 12
+                                        ( makeSelect 13
+                                            ( SelectColumns 14
+                                                [ SelectStar 15 Nothing Unused ]
+                                            )
+                                        )
+                                        { selectFrom = Just
+                                            ( SelectFrom 16
+                                                [ TablishTable 17 TablishAliasesNone ( QTableName 18 Nothing "bar" ) ]
+                                            )
+                                        }
+                                    )
+                                ]
+                            )
+                        }
                     )
                 )
-            ]
+            )
 
         , "SELECT x y FROM (select 1 x) foo GROUP BY y;" ~: testHive "SUBSELECTGROUPBY" defaultTestCatalog
             ( HiveStandardSqlStatement
@@ -800,6 +788,7 @@ testResolutionOnASTs = test
                     )
                 )
             )
+
         , "SELECT * FROM foo x JOIN foo y ON x.a = y.a JOIN foo z ON y.a = z.a;" ~: testVertica "TWOJOINS" defaultTestCatalog
             ( VerticaStandardSqlStatement
                 ( QueryStmt
@@ -809,7 +798,7 @@ testResolutionOnASTs = test
                         )
                         { selectFrom = Just
                             ( SelectFrom 5
-                                [ TablishJoin 6
+                                [ TablishJoin 6 Unused
                                     ( JoinInner 7 )
                                     ( JoinOn
                                         ( BinOpExpr 8
@@ -832,7 +821,7 @@ testResolutionOnASTs = test
                                             )
                                         )
                                     )
-                                    ( TablishJoin 15
+                                    ( TablishJoin 15 Unused
                                         ( JoinInner 16 )
                                         ( JoinOn
                                             ( BinOpExpr 17
@@ -884,7 +873,7 @@ testResolutionOnASTs = test
                         )
                         { selectFrom = Just
                             ( SelectFrom 5
-                                [ TablishJoin 6
+                                [ TablishJoin 6 Unused
                                     ( JoinInner 7 )
                                     ( JoinOn
                                         ( BinOpExpr 8
@@ -907,7 +896,7 @@ testResolutionOnASTs = test
                                             )
                                         )
                                     )
-                                    ( TablishJoin 15
+                                    ( TablishJoin 15 Unused
                                         ( JoinInner 16 )
                                         ( JoinOn
                                             ( BinOpExpr 17
@@ -1099,8 +1088,6 @@ defaultTestCatalog = makeCatalog
     [ mkNormalSchema "public" () ]
     ( defaultDatabase () )
 
-defaultDefaultingTestCatalog :: Catalog
-defaultDefaultingTestCatalog = makeDefaultingCatalog (catalogMap defaultTestCatalog) [mkNormalSchema "public" ()] (defaultDatabase ())
 
 pathologicalSemiJoinStructAccessorCatalog :: Catalog
 pathologicalSemiJoinStructAccessorCatalog = makeCatalog

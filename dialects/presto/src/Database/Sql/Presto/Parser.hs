@@ -276,9 +276,9 @@ tableAliases from =
         TablishAliasesNone -> S.empty
         TablishAliasesT (TableAlias _ name _) -> S.singleton name
         TablishAliasesTC (TableAlias _ name _) _ -> S.singleton name
-    tablishToTableAlias (TablishJoin _ (JoinSemi _) _ _ _) =
+    tablishToTableAlias (TablishJoin _ _ (JoinSemi _) _ _ _) =
         error "this shouldn't happen: no SEMI JOIN in Presto"
-    tablishToTableAlias (TablishJoin _ _ _ lTablish rTablish) =
+    tablishToTableAlias (TablishJoin _ _ _ _ lTablish rTablish) = -- TODO
         tablishToTableAlias lTablish `S.union` tablishToTableAlias rTablish
 
 tableNameToTableAlias :: OQTableName Range -> Set Text
@@ -369,7 +369,7 @@ sampledRelationP = do
         let withAliases = case t of
                 TablishTable info _ tableRef -> TablishTable info as tableRef
                 TablishSubQuery info _ query -> TablishSubQuery info as query
-                TablishJoin _ _ _ _ _ -> error "shouldn't happen"
+                TablishJoin _ _ _ _ _ _ -> error "shouldn't happen"
                 TablishLateralView info _ lv lhs -> TablishLateralView info as lv lhs
         return withAliases
 
@@ -409,7 +409,7 @@ joinP = crossJoinP <|> regularJoinP <|> naturalJoinP
             joinType = JoinInner info
             condition = JoinOn $ ConstantExpr info $ BooleanConstant info True
         return $ \ lhs ->
-            TablishJoin (getInfo lhs <> getInfo rhs) joinType condition lhs rhs
+            TablishJoin (getInfo lhs <> getInfo rhs) Unused joinType condition lhs rhs
 
     regularJoinP :: Parser (Tablish RawNames Range -> Tablish RawNames Range)
     regularJoinP = do
@@ -429,7 +429,7 @@ joinP = crossJoinP <|> regularJoinP <|> naturalJoinP
                 return $ JoinUsing (s <> e) names
             ]
         return $ \ lhs ->
-            TablishJoin (getInfo rhs <> getInfo lhs) joinType condition lhs rhs
+            TablishJoin (getInfo rhs <> getInfo lhs) Unused joinType condition lhs rhs
 
     naturalJoinP :: Parser (Tablish RawNames Range -> Tablish RawNames Range)
     naturalJoinP = do
@@ -438,7 +438,7 @@ joinP = crossJoinP <|> regularJoinP <|> naturalJoinP
         rhs <- sampledRelationP
         let condition = JoinNatural r Unused
         return $ \ lhs ->
-            TablishJoin (getInfo rhs <> getInfo lhs) joinType condition lhs rhs
+            TablishJoin (getInfo rhs <> getInfo lhs) Unused joinType condition lhs rhs
 
     joinTypeP :: Parser (JoinType Range)
     joinTypeP = do

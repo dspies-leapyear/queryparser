@@ -169,7 +169,7 @@ handlePos :: Int -> Query ResolvedNames a -> Observer
 handlePos pos (QuerySelect _ select) = do
     let selections = selectColumnsList $ selectCols select
         starsConcatted = selections >>= (\case
-                                             SelectStar _ _ (StarColumnNames refs) -> refs
+                                             SelectStar _ _ (StarColumnNames refs) -> map (RColumnAlias . snd) refs
                                              SelectExpr _ cAliases _ -> map RColumnAlias cAliases
                                         )
         posRef = starsConcatted !! (pos - 1)  -- SQL is 1 indexed, Haskell is 0 indexed
@@ -205,7 +205,7 @@ queryColumnDeps query =
     queryColumnDepsHelper :: AliasMap -> Query ResolvedNames a -> [Set (RColumnRef ())]
     queryColumnDepsHelper aliasMap (QuerySelect _ s) =
         let selectionDeps :: Selection ResolvedNames a -> [Set (RColumnRef ())]
-            selectionDeps (SelectStar _ _ (StarColumnNames refs)) = map colDeps refs
+            selectionDeps (SelectStar _ _ (StarColumnNames refs)) = map (colDeps . fst) refs
             selectionDeps (SelectExpr _ aliases _) = map aliasDeps aliases
 
             colDeps :: RColumnRef a -> Set (RColumnRef ())
@@ -359,7 +359,7 @@ instance HasColumns (Selection ResolvedNames a) where
         tell $ map (\a -> aliasObservation a cols) aliases
 
 instance HasColumns (StarColumnNames a) where
-    goColumns (StarColumnNames rColumnRefs) = mapM_ goColumns rColumnRefs
+    goColumns (StarColumnNames rColumnRefs) = mapM_ (goColumns . fst) rColumnRefs
 
 instance HasColumns (RColumnRef a) where
     -- treat RColumnRef and RColumnAlias the same, here :)
@@ -367,20 +367,17 @@ instance HasColumns (RColumnRef a) where
         clause <- ask
         tell $ [clauseObservation ref clause]
 
-
 instance HasColumns (Tablish ResolvedNames a) where
     goColumns (TablishTable _ tablishAliases tableRef) = do
         -- no clause infos to emit
         -- but there are potentially alias infos
         case tablishAliases of
-            TablishAliasesNone -> return ()
-            TablishAliasesT _ -> return ()
-            TablishAliasesTC _ cAliases -> case tableRef of
+            RTablishAliases _ cAliases -> case tableRef of
                 RTableRef fqtn SchemaMember{..} ->
                     let fqcns = map (\uqcn -> uqcn { columnNameTable = Identity $ void fqtn }) columnsList
                         cRefSets = map (S.singleton . RColumnRef) fqcns
                      in tell $ zipWith aliasObservation cAliases cRefSets
-                RTableAlias _ -> return ()
+                RTableAlias _ cAliases' -> tell $ zipWith aliasObservation cAliases $ map (S.singleton . RColumnAlias) cAliases'
 
     goColumns (TablishSubQuery _ tablishAliases query) = do
         -- recurse to emit clause infos
@@ -388,12 +385,13 @@ instance HasColumns (Tablish ResolvedNames a) where
 
         -- also emit alias infos (if any)
         case tablishAliases of
-            TablishAliasesNone -> return ()
-            TablishAliasesT _ -> return ()
-            TablishAliasesTC _ cAliases ->
+            RTablishAliases _ cAliases ->
                 tell $ zipWith aliasObservation cAliases (queryColumnDeps query)
 
-    goColumns (TablishJoin _ _ cond lhs rhs) = do
+    goColumns (TablishJoin _ (RTablishAliases _ columnAliases) _ cond lhs rhs) = do
+        let lcolumnAliases = tablishColumnAliases lhs
+            rcolumnAliases = tablishColumnAliases rhs
+        tell $ zipWith aliasObservation columnAliases $ map (S.singleton . RColumnAlias) $ lcolumnAliases ++ rcolumnAliases
         bindClause "JOIN" $ goColumns cond
         goColumns lhs
         goColumns rhs
@@ -414,9 +412,7 @@ instance HasColumns (Tablish ResolvedNames a) where
         -- :-( So let's just handle the particular case where lateralViewExpr
         -- is a singleton list :-)
         case aliases of
-            TablishAliasesNone -> return ()
-            TablishAliasesT _ -> return ()
-            TablishAliasesTC _ cAliases -> case lateralViewExprs of
+            RTablishAliases _ cAliases -> case lateralViewExprs of
                 [FunctionExpr _ _ _ [e] _ _ _] ->
                        let observations = execWriter $ runReaderT (goColumns e) baseClause
                            refs = S.fromList $ map fst $ rights observations

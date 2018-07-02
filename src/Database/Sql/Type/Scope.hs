@@ -35,6 +35,7 @@ import Database.Sql.Type.TableProps
 import Database.Sql.Type.Unused
 import Database.Sql.Type.Query
 
+import Control.Applicative
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
@@ -54,26 +55,31 @@ import Data.Data (Data)
 import GHC.Generics (Generic)
 
 
--- | A ColumnSet records the table-bindings (if any) of columns.
---
--- Can be used to represent columns that are in ambient scope,
--- which can be referenced, based on arcane and dialect specific rules.
--- The fst component will be Nothing for collections of column
--- aliases bound in a containing select statement (which thus have no
--- corresponding Tablish), or for subqueries/lateral views with no table alias.
---
--- Can also be used to represent "what stars expand into".
+type AmbiguousTable a = ()  -- at some point, collect a's
+type AmbiguousColumn a = ()
 
-type ColumnSet a = [(Maybe (RTableRef a), [RColumnRef a])]
+data ColumnSet a = ColumnSet
+  { relationColumns :: [RColumnRef a]
+  , subrelations :: HashMap (OQTableName ()) (Either (AmbiguousTable a) (RTableRef a, [RColumnRef a]))
+  , columnsInScope :: HashMap (OQColumnName ()) (Either (AmbiguousColumn a) (RColumnRef a))
+  } deriving (Eq, Show, Functor)
 
+ambiguousColumn :: (b ~ Either (AmbiguousColumn a) (RColumnRef a)) => b -> b -> b
+ambiguousColumn _ _ = Left ()
+
+ambiguousTable :: (b ~ Either (AmbiguousTable a) (RTableRef a, [RColumnRef a])) => b -> b -> b
+ambiguousTable _ _ = Left ()
+
+emptyColumnSet :: ColumnSet a
+emptyColumnSet = ColumnSet [] HMS.empty HMS.empty
 
 data Bindings a = Bindings
-    { boundCTEs :: [(TableAlias a, [RColumnRef a])]
+    { boundCTEs :: [(TableAlias a, [ColumnAlias a])]
     , boundColumns :: ColumnSet a
     }
 
 emptyBindings :: Bindings a
-emptyBindings = Bindings [] []
+emptyBindings = Bindings [] emptyColumnSet
 
 data SelectScope a = SelectScope
     { bindForHaving :: forall r m . MonadReader (ResolverInfo a) m => m r -> m r
@@ -84,7 +90,7 @@ data SelectScope a = SelectScope
     }
 
 type FromColumns a = ColumnSet a
-type SelectionAliases a = [RColumnRef a]
+type SelectionAliases a = [ColumnAlias a]
 
 data ResolverInfo a = ResolverInfo
     { catalog :: Catalog
@@ -97,28 +103,78 @@ data ResolverInfo a = ResolverInfo
 mapBindings :: (Bindings a -> Bindings a) -> ResolverInfo a -> ResolverInfo a
 mapBindings f ResolverInfo{..} = ResolverInfo{bindings = f bindings, ..}
 
+joinColumnSets :: ColumnSet a -> ColumnSet a -> ColumnSet a
+joinColumnSets lhs rhs = ColumnSet
+    { relationColumns = relationColumns lhs ++ relationColumns rhs
+    , subrelations = HMS.unionWith ambiguousTable (subrelations lhs) (subrelations rhs)
+    , columnsInScope = HMS.unionWith ambiguousColumn (columnsInScope lhs) (columnsInScope rhs)
+    }
+
+class Truncatable a where
+    truncations :: a -> [a]
+
+instance Truncatable (QColumnName Maybe a) where
+    truncations (QColumnName i maybeTable name) = do
+        table <- Nothing : maybe [] (map Just . truncations) maybeTable
+        pure $ QColumnName i table name
+
+instance Truncatable (QTableName Maybe a) where
+    truncations (QTableName i maybeSchema name) = do
+        schema <- Nothing : maybe [] (map Just . truncations) maybeSchema
+        pure $ QTableName i schema name
+
+instance Truncatable (QSchemaName Maybe a) where
+    truncations (QSchemaName i maybeDatabase name schemaType) = do
+        db <- Nothing : maybe [] (pure . Just) maybeDatabase
+        pure $ QSchemaName i db name schemaType
+
+makeColumnSet :: Maybe (RTableRef a) -> [RColumnRef a] -> ColumnSet a
+makeColumnSet table relationColumns = ColumnSet{..}
+  where
+    subrelations = HMS.fromList $ case table of
+        Nothing -> []
+        Just ref@(RTableAlias (TableAlias _ name _) _) -> (, Right (ref, relationColumns)) <$> [QTableName () Nothing name]
+        Just ref@(RTableRef fqtn _) -> (, Right (ref, relationColumns)) <$> truncations (void $ fqtnToOQTN fqtn)
+
+    columnsInScope = HMS.fromList $ relationColumns >>= \ref ->
+        (, Right ref) <$> case ref of
+            RColumnAlias alias -> truncations $ aliasToOQCN alias
+            RColumnRef name -> truncations $ overrideTableForOQCN name
+
+    fqtnToOQTN (QTableName ti (Identity (QSchemaName si (Identity (DatabaseName di dname)) sname stype)) tname) =
+        QTableName ti (Just (QSchemaName si (Just (DatabaseName di dname)) sname stype)) tname
+
+    aliasToOQCN (ColumnAlias _ columnName _) = case table of
+        Nothing -> QColumnName () Nothing columnName
+        Just (RTableAlias (TableAlias _ tableName _) _) -> QColumnName () (Just (QTableName () Nothing tableName)) columnName
+        Just (RTableRef fqtn _) -> QColumnName () (Just $ void $ fqtnToOQTN fqtn) columnName
+
+    overrideTableForOQCN (QColumnName _ (Identity fqtn) columnName) =
+        let oqtn = Just $ void $ fqtnToOQTN fqtn
+            oqtn' = case table of
+                Nothing -> Nothing
+                Just (RTableAlias (TableAlias _ tableName _) _) -> Just $ QTableName () Nothing tableName
+                Just (RTableRef fqtn' _) -> Just $ void $ fqtnToOQTN fqtn'
+         in QColumnName () (oqtn' <|> oqtn) columnName
 
 bindColumns :: MonadReader (ResolverInfo a) m => ColumnSet a -> m r -> m r
-bindColumns columns = local (mapBindings $ \ Bindings{..} -> Bindings{boundColumns = columns ++ boundColumns, ..})
-
+bindColumns columns = local (mapBindings $ \ Bindings{..} -> Bindings{boundColumns = joinColumnSets columns boundColumns, ..})
 
 bindFromColumns :: MonadReader (ResolverInfo a) m => FromColumns a -> m r -> m r
 bindFromColumns = bindColumns
 
 bindAliasedColumns :: MonadReader (ResolverInfo a) m => SelectionAliases a -> m r -> m r
-bindAliasedColumns selectionAliases = bindColumns [(Nothing, selectionAliases)]
+bindAliasedColumns selectionAliases = bindColumns $ makeColumnSet Nothing $ map RColumnAlias selectionAliases
 
 bindBothColumns :: MonadReader (ResolverInfo a) m => FromColumns a -> SelectionAliases a -> m r -> m r
-bindBothColumns fromColumns selectionAliases = bindColumns $ (Nothing, onlyNewAliases selectionAliases) : fromColumns
-  where
-    onlyNewAliases = filter $ \case
-        alias@(RColumnAlias _) -> not $ inFromColumns alias
-        RColumnRef _ -> False
-
-    inFromColumns alias =
-        let alias' = void alias
-            cols = map void (snd =<< fromColumns)
-         in alias' `elem` cols
+bindBothColumns fromColumns selectionAliases m = do
+    let newColumns = HMS.fromList $ map (\ alias@(ColumnAlias _ name _) -> (QColumnName () Nothing name, Right $ RColumnAlias alias)) selectionAliases
+        cs = ColumnSet
+                { relationColumns = map RColumnAlias selectionAliases
+                , subrelations = subrelations fromColumns
+                , columnsInScope = HMS.union newColumns $ columnsInScope fromColumns
+                }
+    bindColumns cs m
 
 data RawNames
 deriving instance Data RawNames
@@ -140,7 +196,7 @@ instance Resolution RawNames where
 
 data ResolvedNames
 deriving instance Data ResolvedNames
-newtype StarColumnNames a = StarColumnNames [RColumnRef a]
+newtype StarColumnNames a = StarColumnNames [(RColumnRef a, ColumnAlias a)]
     deriving (Generic, Data, Eq, Ord, Show, Functor)
 
 newtype ColumnAliasList a = ColumnAliasList [ColumnAlias a]
@@ -192,10 +248,10 @@ data Catalog = Catalog
     , catalogHasDatabase :: DatabaseName () -> Existence
     , catalogHasSchema :: UQSchemaName () -> Existence
     , catalogHasTable :: UQTableName () -> Existence  -- | nb DoesNotExist does not imply that we can't resolve to this name (defaulting)
-    , catalogResolveTableRef :: forall a . [(TableAlias a, [RColumnRef a])] -> OQTableName a -> CatalogObjectResolver a (WithColumns RTableRef a)
+    , catalogResolveTableRef :: forall a . [(TableAlias a, [ColumnAlias a])] -> OQTableName a -> CatalogObjectResolver a (WithColumns RTableRef a)
     , catalogResolveCreateSchemaName :: forall a . OQSchemaName a -> CatalogObjectResolver a (RCreateSchemaName a)
     , catalogResolveCreateTableName :: forall a . OQTableName a -> CatalogObjectResolver a (RCreateTableName a)
-    , catalogResolveColumnName :: forall a . [(Maybe (RTableRef a), [RColumnRef a])] -> OQColumnName a -> CatalogObjectResolver a (RColumnRef a)
+    , catalogResolveColumnName :: forall a . ColumnSet a -> OQColumnName a -> CatalogObjectResolver a (RColumnRef a)
     , overCatalogMap :: forall a . (CatalogMap -> (CatalogMap, a)) -> (Catalog, a)
     , catalogMap :: !CatalogMap
     , catalogWithPath :: Path -> Catalog
@@ -257,26 +313,34 @@ data WithColumns r a = WithColumns
     , withColumnsColumns :: ColumnSet a
     }
 
+data WithColumnsAndAliases r a = WithColumnsAndAliases (r a) (ColumnSet a) [ColumnAlias a]
 data WithColumnsAndOrders r a = WithColumnsAndOrders (r a) (ColumnSet a) [Order ResolvedNames a]
 
 -- R for "resolved"
 data RTableRef a
     = RTableRef (FQTableName a) SchemaMember
-    | RTableAlias (TableAlias a)
+    | RTableAlias (TableAlias a) [ColumnAlias a]
       deriving (Generic, Data, Show, Eq, Ord, Functor, Foldable, Traversable)
 
 resolvedTableHasName :: QTableName f a -> RTableRef a -> Bool
-resolvedTableHasName (QTableName _ _ name) (RTableAlias (TableAlias _ name' _)) = name' == name
+resolvedTableHasName (QTableName _ _ name) (RTableAlias (TableAlias _ name' _) _) = name' == name
 resolvedTableHasName (QTableName _ _ name) (RTableRef (QTableName _ _ name') _) = name' == name
 
 resolvedTableHasSchema :: QSchemaName f a -> RTableRef a -> Bool
-resolvedTableHasSchema _ (RTableAlias _) = False
+resolvedTableHasSchema _ (RTableAlias _ _) = False
 resolvedTableHasSchema (QSchemaName _ _ name schemaType) (RTableRef (QTableName _ (Identity (QSchemaName _ _ name' schemaType')) _) _) =
     name == name' && schemaType == schemaType'
 
 resolvedTableHasDatabase :: DatabaseName a -> RTableRef a -> Bool
-resolvedTableHasDatabase _ (RTableAlias _) = False
+resolvedTableHasDatabase _ (RTableAlias _ _) = False
 resolvedTableHasDatabase (DatabaseName _ name) (RTableRef (QTableName _ (Identity (QSchemaName _ (Identity (DatabaseName _ name')) _ _)) _) _) = name' == name
+
+tablishColumnAliases :: Tablish ResolvedNames a -> [ColumnAlias a]
+tablishColumnAliases = \case
+  TablishTable _ (RTablishAliases _ columnAliases) _ -> columnAliases
+  TablishSubQuery _ (RTablishAliases _ columnAliases) _ -> columnAliases
+  TablishJoin _ (RTablishAliases _ columnAliases) _ _ _ _ -> columnAliases
+  TablishLateralView _ (RTablishAliases _ columnAliases) _ _ -> columnAliases
 
 
 data RTableName a = RTableName (FQTableName a) SchemaMember
@@ -325,7 +389,7 @@ instance ToJSON a => ToJSON (RTableRef a) where
         [ "tag" .= String "RTableRef"
         , "fqtn" .= fqtn
         ]
-    toJSON (RTableAlias alias) = object
+    toJSON (RTableAlias alias _) = object
         [ "tag" .= String "RTableAlias"
         , "alias" .= alias
         ]

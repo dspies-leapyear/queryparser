@@ -9,29 +9,33 @@
                                       [SelectExpr 4 [ColumnAlias 5 "a" (ColumnAliasId 1)]
                                          (ColumnExpr 6
                                             (RColumnAlias
-                                               (ColumnAlias 9 "a" (ColumnAliasId (-2)))))]},
+                                               (ColumnAlias 10 "a" (ColumnAliasId (-1)))))]},
                     selectFrom =
                       Just
-                        (SelectFrom 8
-                           [TablishTable 9
-                              (RTablishAliases (Right (TableAlias 9 "foo" (TableAliasId (-1))))
-                                 [ColumnAlias 9 "a" (ColumnAliasId (-2))])
+                        (SelectFrom 9
+                           [TablishTable 10
+                              (RTablishAliases (Right (TableAlias 11 "baz" (TableAliasId 2)))
+                                 [ColumnAlias 10 "a" (ColumnAliasId (-1)),
+                                  ColumnAlias 10 "b" (ColumnAliasId (-2))])
                               (RTableRef
-                                 (QTableName{tableNameInfo = 10,
+                                 (QTableName{tableNameInfo = 12,
                                              tableNameSchema =
                                                Identity
-                                                 (QSchemaName{schemaNameInfo = 10,
+                                                 (QSchemaName{schemaNameInfo = 12,
                                                               schemaNameDatabase =
                                                                 Identity
-                                                                  (DatabaseName 10 "default_db"),
+                                                                  (DatabaseName 12 "default_db"),
                                                               schemaNameName = "public",
                                                               schemaNameType = NormalSchema}),
-                                             tableNameName = "foo"})
+                                             tableNameName = "bar"})
                                  (SchemaMember{tableType = Table, persistence = Persistent,
                                                columnsList =
                                                  [QColumnName{columnNameInfo = (),
                                                               columnNameTable = None,
-                                                              columnNameName = "a"}],
+                                                              columnNameName = "a"},
+                                                  QColumnName{columnNameInfo = (),
+                                                              columnNameTable = None,
+                                                              columnNameName = "b"}],
                                                viewQuery = Nothing}))]),
                     selectWhere = Nothing, selectTimeseries = Nothing,
                     selectGroup = Nothing, selectHaving = Nothing,
