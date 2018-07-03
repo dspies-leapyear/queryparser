@@ -199,7 +199,7 @@ selectionNames (SelectExpr _ aliases _) = aliases
 selectionNames (SelectStar _ _ (StarColumnNames referents)) = map snd referents
 
 selectionExprs :: Selection ResolvedNames a -> [Expr ResolvedNames a]
-selectionExprs (SelectExpr info aliases _) = map (ColumnExpr info . RColumnAlias) aliases
+selectionExprs (SelectExpr _ _ expr) = [expr]
 selectionExprs (SelectStar info _ (StarColumnNames referents)) = map (ColumnExpr info . RColumnAlias . snd) referents
 
 queryColumnNames :: Query ResolvedNames a -> [ColumnAlias a]
