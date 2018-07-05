@@ -166,8 +166,18 @@ bindFromColumns = bindColumns
 bindAliasedColumns :: MonadReader (ResolverInfo a) m => SelectionAliases a -> m r -> m r
 bindAliasedColumns selectionAliases = bindColumns $ makeColumnSet Nothing $ map RColumnAlias selectionAliases
 
-bindBothColumns :: MonadReader (ResolverInfo a) m => FromColumns a -> SelectionAliases a -> m r -> m r
-bindBothColumns fromColumns selectionAliases m = do
+bindFromShadowingAliases :: MonadReader (ResolverInfo a) m => FromColumns a -> SelectionAliases a -> m r -> m r
+bindFromShadowingAliases fromColumns selectionAliases m = do
+    let newColumns = HMS.fromList $ map (\ alias@(ColumnAlias _ name _) -> (QColumnName () Nothing name, Right $ RColumnAlias alias)) selectionAliases
+        cs = ColumnSet
+                { relationColumns = map RColumnAlias selectionAliases
+                , subrelations = subrelations fromColumns
+                , columnsInScope = HMS.union (columnsInScope fromColumns) newColumns
+                }
+    bindColumns cs m
+
+bindAliasesShadowingFrom :: MonadReader (ResolverInfo a) m => FromColumns a -> SelectionAliases a -> m r -> m r
+bindAliasesShadowingFrom fromColumns selectionAliases m = do
     let newColumns = HMS.fromList $ map (\ alias@(ColumnAlias _ name _) -> (QColumnName () Nothing name, Right $ RColumnAlias alias)) selectionAliases
         cs = ColumnSet
                 { relationColumns = map RColumnAlias selectionAliases

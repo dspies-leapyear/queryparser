@@ -85,9 +85,9 @@ instance Dialect Vertica where
 
     getSelectScope _ fromColumns selectionAliases = SelectScope
         { bindForWhere = bindFromColumns fromColumns
-        , bindForGroup = bindBothColumns fromColumns selectionAliases
+        , bindForGroup = bindFromShadowingAliases fromColumns selectionAliases
         , bindForHaving = bindFromColumns fromColumns
-        , bindForOrder = bindBothColumns fromColumns selectionAliases
+        , bindForOrder = bindAliasesShadowingFrom fromColumns selectionAliases
         , bindForNamedWindow = bindFromColumns fromColumns
         }
 
