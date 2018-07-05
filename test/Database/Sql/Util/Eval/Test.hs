@@ -40,7 +40,6 @@ import Database.Sql.Presto.Type as PrestoQL
 
 import Control.Monad (void)
 
-import Data.List (sort)
 import           Data.Map (Map)
 import qualified Data.Map as M
 
@@ -173,12 +172,6 @@ testEvaluation = test
                 let Right rows = recordSetItems <$> runEval f (lookupDB db)
                     Just (RecordSet _ fooRows) = M.lookup (QTableName () (pure $ inDefaultDatabase "public") "foo") db
                  in rows == fooRows
-
-        , testAll "SELECT * FROM foo ORDER BY a;" defaultTestCatalog $ \ f -> do
-            assertQuickCheck "order by works" $ \ (ConcreteDb db :: ConcreteDb DefaultCatalogType) ->
-                let rows = either (error . show) id $ recordSetItems <$> runEval f (lookupDB db)
-                    Just (RecordSet _ fooRows) = M.lookup (QTableName () (pure $ inDefaultDatabase "public") "foo") db
-                 in rows == sort fooRows
 
         , testAll "SELECT 1 FROM foo GROUP BY a;" defaultTestCatalog $ \ f -> do
             assertQuickCheck "can evaluate query with group by clause" $ \ (ConcreteDb db :: ConcreteDb DefaultCatalogType) ->
