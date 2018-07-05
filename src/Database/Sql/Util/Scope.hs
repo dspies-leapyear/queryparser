@@ -178,7 +178,7 @@ resolveQueryWithColumns (QueryOrder info orders query) =
             WithColumns query' columns <- resolveQueryWithColumns query
             let names = queryColumnNames query'
                 exprs = map (ColumnExpr info . RColumnAlias) names
-            orders' <- bindAliasedColumns names $ mapM (resolveOrder exprs) orders
+            orders' <- bindAliasedColumns names $ mapM (resolveOrder $ zip (map void names) exprs) orders
             pure $ WithColumns (QueryOrder info orders' query') columns
 
 resolveQueryWithColumns (QueryLimit info limit query) = overWithColumns (QueryLimit info limit) <$> resolveQueryWithColumns query
@@ -225,14 +225,15 @@ resolveSelectAndOrders Select{..} orders = do
 
         let selectedAliases = selectionNames =<< selectColumnsList selectCols'
             selectedExprs = selectionExprs =<< selectColumnsList selectCols'
+            namedExprs = zip (map void selectedAliases) selectedExprs
 
         SelectScope{..} <- (\ f -> f columns selectedAliases) <$> asks selectScope
 
         selectHaving' <- bindForHaving $ traverse resolveSelectHaving selectHaving
         selectWhere' <- bindForWhere $ traverse resolveSelectWhere selectWhere
-        selectGroup' <- bindForGroup $ traverse (resolveSelectGroup selectedExprs) selectGroup
+        selectGroup' <- bindForGroup $ traverse (resolveSelectGroup namedExprs) selectGroup
         selectNamedWindow' <- bindForNamedWindow $ traverse resolveSelectNamedWindow selectNamedWindow
-        orders' <- bindForOrder $ mapM (resolveOrder selectedExprs) orders
+        orders' <- bindForOrder $ mapM (resolveOrder namedExprs) orders
         let select = Select { selectCols = selectCols'
                             , selectFrom = selectFrom'
                             , selectWhere = selectWhere'
@@ -538,7 +539,7 @@ resolveExpr (ArrayAccessExpr info expr idx) = ArrayAccessExpr info <$> resolveEx
 resolveExpr (TypeCastExpr info onFail expr type_) = TypeCastExpr info onFail <$> resolveExpr expr <*> pure type_
 resolveExpr (VariableSubstitutionExpr info) = pure $ VariableSubstitutionExpr info
 
-resolveOrder :: [Expr ResolvedNames a]
+resolveOrder :: [(ColumnAlias (), Expr ResolvedNames a)]
              -> Order RawNames a
              -> Resolver (Order ResolvedNames) a
 resolveOrder exprs (Order i posOrExpr direction nullPos) =
@@ -842,22 +843,29 @@ resolveSelectTimeseries SelectTimeseries{..} = do
         , ..
         }
 
-resolvePositionOrExpr :: [Expr ResolvedNames a] -> PositionOrExpr RawNames a -> Resolver (PositionOrExpr ResolvedNames) a
-resolvePositionOrExpr _ (PositionOrExprExpr expr) = PositionOrExprExpr <$> resolveExpr expr
+resolvePositionOrExpr :: [(ColumnAlias (), Expr ResolvedNames a)] -> PositionOrExpr RawNames a -> Resolver (PositionOrExpr ResolvedNames) a
+resolvePositionOrExpr exprs (PositionOrExprExpr expr) =
+    PositionOrExprExpr . replaceAlias <$> resolveExpr expr
+  where
+    replaceAlias = \case
+      ColumnExpr _ (RColumnAlias alias)
+        | Just expr' <- lookup (void alias) exprs -> expr'
+      expr' -> expr'
+
 resolvePositionOrExpr exprs (PositionOrExprPosition info pos Unused)
     | pos < 1 = throwError $ BadPositionalReference info pos
     | otherwise =
         case drop (pos - 1) exprs of
-            expr:_ -> pure $ PositionOrExprPosition info pos expr
+            (_, expr):_ -> pure $ PositionOrExprPosition info pos expr
             [] -> throwError $ BadPositionalReference info pos
 
-resolveGroupingElement :: [Expr ResolvedNames a] -> GroupingElement RawNames a -> Resolver (GroupingElement ResolvedNames) a
+resolveGroupingElement :: [(ColumnAlias (), Expr ResolvedNames a)] -> GroupingElement RawNames a -> Resolver (GroupingElement ResolvedNames) a
 resolveGroupingElement exprs (GroupingElementExpr info posOrExpr) =
     GroupingElementExpr info <$> resolvePositionOrExpr exprs posOrExpr
 resolveGroupingElement _ (GroupingElementSet info exprs) =
     GroupingElementSet info <$> mapM resolveExpr exprs
 
-resolveSelectGroup :: [Expr ResolvedNames a] -> SelectGroup RawNames a -> Resolver (SelectGroup ResolvedNames) a
+resolveSelectGroup :: [(ColumnAlias (), Expr ResolvedNames a)] -> SelectGroup RawNames a -> Resolver (SelectGroup ResolvedNames) a
 resolveSelectGroup exprs SelectGroup{..} = do
     selectGroupGroupingElements' <- mapM (resolveGroupingElement exprs) selectGroupGroupingElements
     pure $ SelectGroup

@@ -36,9 +36,9 @@
                                      selectGroupGroupingElements =
                                        [GroupingElementExpr 19
                                           (PositionOrExprExpr
-                                             (ColumnExpr 19
+                                             (ColumnExpr 6
                                                 (RColumnAlias
-                                                   (ColumnAlias 5 "y" (ColumnAliasId 1)))))]}),
+                                                   (ColumnAlias 15 "x" (ColumnAliasId 2)))))]}),
                     selectHaving = Nothing, selectNamedWindow = Nothing,
                     selectDistinct = Distinct False})))),
  [])
