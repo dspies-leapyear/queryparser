@@ -76,7 +76,7 @@ instance Dialect Hive where
     getSelectScope _ fromColumns selectionAliases = SelectScope
         { bindForWhere = bindFromColumns fromColumns
         , bindForGroup = bindFromColumns fromColumns
-        , bindForHaving = bindBothColumns fromColumns selectionAliases
+        , bindForHaving = bindAliasesShadowingFrom fromColumns selectionAliases
         , bindForOrder = bindAliasedColumns selectionAliases
         , bindForNamedWindow = bindFromColumns fromColumns
         }

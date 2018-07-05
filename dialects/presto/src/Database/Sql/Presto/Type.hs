@@ -64,7 +64,7 @@ instance Dialect Presto where
         { bindForWhere = bindFromColumns fromColumns
         , bindForGroup = bindFromColumns fromColumns
         , bindForHaving = bindFromColumns fromColumns
-        , bindForOrder = bindBothColumns fromColumns selectionAliases
+        , bindForOrder = bindAliasesShadowingFrom fromColumns selectionAliases
         , bindForNamedWindow = bindColumns emptyColumnSet -- Presto doesn't have this language feature
         }
 
