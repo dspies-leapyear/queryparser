@@ -18,20 +18,20 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Parser.Shared where
+module Database.Sql.Teradata.Parser.Shared where
 
 -- This module exists to prevent cyclic dependencies: parsers that are needed
--- in both Vertica.Parser and Vertica.Parser.IngestionOptions should go in
+-- in both Teradata.Parser and Teradata.Parser.IngestionOptions should go in
 -- here.
 
 import Database.Sql.Type
 import Database.Sql.Info
 import Database.Sql.Position
 
-import Database.Sql.Vertica.Type
-import Database.Sql.Vertica.Parser.Internal
+import Database.Sql.Teradata.Type
+import Database.Sql.Teradata.Parser.Internal
 
-import qualified Database.Sql.Vertica.Parser.Token as Tok
+import qualified Database.Sql.Teradata.Parser.Token as Tok
 
 import           Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as TL

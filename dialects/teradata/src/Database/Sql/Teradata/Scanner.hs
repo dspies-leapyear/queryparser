@@ -18,7 +18,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Scanner where
+module Database.Sql.Teradata.Scanner where
 
 import Prelude hiding ((&&), (||), not)
 
@@ -34,7 +34,7 @@ import Data.Foldable (asum)
 import Data.Char (isAlphaNum, isAlpha, isSpace, isDigit)
 
 import Database.Sql.Position
-import Database.Sql.Vertica.Token
+import Database.Sql.Teradata.Token
 
 import Data.Predicate.Class
 
@@ -145,7 +145,7 @@ tokenize = go (Position 1 0 0)
         $ map (\ op -> (op,) <$> TL.stripPrefix op t) operators
 
 
--- | tokString returns Text, not ByteString, because there is no way to put arbitrary byte sequences in this kind of Vertica string (... for now?)
+-- | tokString returns Text, not ByteString, because there is no way to put arbitrary byte sequences in this kind of Teradata string (... for now?)
 tokString :: Position -> Char -> Text -> Either Position (Text, Text, Position)
 tokString pos d = go (advanceHorizontal 1 pos) [] . TL.tail
   where

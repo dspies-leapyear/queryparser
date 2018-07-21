@@ -12,6 +12,7 @@ packages:
 - 'dialects/vertica'
 - 'dialects/hive'
 - 'dialects/presto'
+- 'dialects/teradata'
 
 docker:
     enable: true

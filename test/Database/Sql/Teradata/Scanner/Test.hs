@@ -18,12 +18,12 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Scanner.Test where
+module Database.Sql.Teradata.Scanner.Test where
 
 import Test.HUnit
 import Database.Sql.Position
-import Database.Sql.Vertica.Scanner
-import Database.Sql.Vertica.Token
+import Database.Sql.Teradata.Scanner
+import Database.Sql.Teradata.Token
 
 initPos :: Position
 initPos = Position 1 0 0

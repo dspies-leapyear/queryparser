@@ -28,7 +28,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Database.Sql.Vertica.Type where
+module Database.Sql.Teradata.Type where
 
 import Database.Sql.Type
 import Database.Sql.Position
@@ -69,15 +69,15 @@ import Data.Data (Data)
 import GHC.Generics (Generic)
 
 
-data Vertica
+data Teradata
 
-deriving instance Data Vertica
+deriving instance Data Teradata
 
-dialectProxy :: Proxy Vertica
+dialectProxy :: Proxy Teradata
 dialectProxy = Proxy
 
-instance Dialect Vertica where
-    type DialectCreateTableExtra Vertica r = TableInfo r
+instance Dialect Teradata where
+    type DialectCreateTableExtra Teradata r = TableInfo r
 
     shouldCTEsShadowTables _ = True
 
@@ -126,20 +126,20 @@ resolveTableInfo TableInfo{..} = do
             }
 
 
-data VerticaStatement r a = VerticaStandardSqlStatement (Statement Vertica r a)
-                            | VerticaCreateProjectionStatement (CreateProjection r a)
-                            | VerticaMultipleRenameStatement (MultipleRename r a)
-                            | VerticaSetSchemaStatement (SetSchema r a)
-                            | VerticaMergeStatement (Merge r a)
-                            | VerticaUnhandledStatement a
+data TeradataStatement r a = TeradataStandardSqlStatement (Statement Teradata r a)
+                           | TeradataCreateProjectionStatement (CreateProjection r a)
+                           | TeradataMultipleRenameStatement (MultipleRename r a)
+                           | TeradataSetSchemaStatement (SetSchema r a)
+                           | TeradataMergeStatement (Merge r a)
+                           | TeradataUnhandledStatement a
 
-deriving instance (ConstrainSNames Data r a, Data r) => Data (VerticaStatement r a)
-deriving instance Generic (VerticaStatement r a)
-deriving instance ConstrainSNames Eq r a => Eq (VerticaStatement r a)
-deriving instance ConstrainSNames Show r a => Show (VerticaStatement r a)
-deriving instance ConstrainSASNames Functor r => Functor (VerticaStatement r)
-deriving instance ConstrainSASNames Foldable r => Foldable (VerticaStatement r)
-deriving instance ConstrainSASNames Traversable r => Traversable (VerticaStatement r)
+deriving instance (ConstrainSNames Data r a, Data r) => Data (TeradataStatement r a)
+deriving instance Generic (TeradataStatement r a)
+deriving instance ConstrainSNames Eq r a => Eq (TeradataStatement r a)
+deriving instance ConstrainSNames Show r a => Show (TeradataStatement r a)
+deriving instance ConstrainSASNames Functor r => Functor (TeradataStatement r)
+deriving instance ConstrainSASNames Foldable r => Foldable (TeradataStatement r)
+deriving instance ConstrainSASNames Traversable r => Traversable (TeradataStatement r)
 
 
 data TableEncoding r a = TableEncoding a [(ColumnRef r a, Encoding a)]
@@ -359,43 +359,43 @@ decomposeMerge Merge{..} = fromList $ catMaybes [ fmap mkInsert mergeInsertDirec
          in UpdateStmt Update{..}
 
 
-instance HasJoins (VerticaStatement ResolvedNames a) where
-    getJoins (VerticaStandardSqlStatement stmt) = getJoins stmt
-    getJoins (VerticaCreateProjectionStatement CreateProjection{..}) = getJoins (QueryStmt createProjectionQuery)
-    getJoins (VerticaMultipleRenameStatement _) = S.empty
-    getJoins (VerticaSetSchemaStatement _) = S.empty
-    getJoins (VerticaMergeStatement merge) = foldMap getJoins $ toList $ decomposeMerge merge
-    getJoins (VerticaUnhandledStatement _) = S.empty
+instance HasJoins (TeradataStatement ResolvedNames a) where
+    getJoins (TeradataStandardSqlStatement stmt) = getJoins stmt
+    getJoins (TeradataCreateProjectionStatement CreateProjection{..}) = getJoins (QueryStmt createProjectionQuery)
+    getJoins (TeradataMultipleRenameStatement _) = S.empty
+    getJoins (TeradataSetSchemaStatement _) = S.empty
+    getJoins (TeradataMergeStatement merge) = foldMap getJoins $ toList $ decomposeMerge merge
+    getJoins (TeradataUnhandledStatement _) = S.empty
 
 
-instance HasTableLineage (VerticaStatement ResolvedNames a) where
-    getTableLineage (VerticaStandardSqlStatement stmt) = tableLineage stmt
+instance HasTableLineage (TeradataStatement ResolvedNames a) where
+    getTableLineage (TeradataStandardSqlStatement stmt) = tableLineage stmt
 
     -- CREATE PROJECTION does not create a **table** so it has no table lineage.
-    getTableLineage (VerticaCreateProjectionStatement _) = M.empty
+    getTableLineage (TeradataCreateProjectionStatement _) = M.empty
 
-    getTableLineage (VerticaMultipleRenameStatement (MultipleRename _ renames)) =
+    getTableLineage (TeradataMultipleRenameStatement (MultipleRename _ renames)) =
         foldl' (\ ls -> squashTableLineage ls . tableLineage . AlterTableStmt) M.empty renames
 
-    getTableLineage (VerticaSetSchemaStatement (SetSchema _ (RTableName fqtn _) (QSchemaName _ (Identity (DatabaseName _ db)) schema schemaType))) = case schemaType of
+    getTableLineage (TeradataSetSchemaStatement (SetSchema _ (RTableName fqtn _) (QSchemaName _ (Identity (DatabaseName _ db)) schema schemaType))) = case schemaType of
         NormalSchema ->
             let from@(FullyQualifiedTableName _ _ table) = mkFQTN fqtn
                 to = FullyQualifiedTableName db schema table
              in M.fromList [(to, S.singleton from), (from, S.empty)]
         SessionSchema -> error $ "can't set a table's schema to SessionSchema"
 
-    getTableLineage (VerticaMergeStatement merge) = M.unionsWith S.union $ map tableLineage $ toList $ decomposeMerge merge
+    getTableLineage (TeradataMergeStatement merge) = M.unionsWith S.union $ map tableLineage $ toList $ decomposeMerge merge
 
-    getTableLineage (VerticaUnhandledStatement _) = M.empty
+    getTableLineage (TeradataUnhandledStatement _) = M.empty
 
 
-instance HasColumnLineage (VerticaStatement ResolvedNames Range) where
-    getColumnLineage (VerticaStandardSqlStatement stmt) = columnLineage stmt
+instance HasColumnLineage (TeradataStatement ResolvedNames Range) where
+    getColumnLineage (TeradataStandardSqlStatement stmt) = columnLineage stmt
 
     -- CREATE PROJECTION does not create a **table** so it has no column lineage.
-    getColumnLineage (VerticaCreateProjectionStatement _) = returnNothing M.empty
+    getColumnLineage (TeradataCreateProjectionStatement _) = returnNothing M.empty
 
-    getColumnLineage (VerticaMultipleRenameStatement (MultipleRename _ renames)) =
+    getColumnLineage (TeradataMultipleRenameStatement (MultipleRename _ renames)) =
         returnNothing $ foldl' (\ ls -> squashColumns ls . snd . columnLineage . AlterTableStmt) M.empty renames
       where
         squashColumns :: ColumnLineagePlus -> ColumnLineagePlus -> ColumnLineagePlus
@@ -420,7 +420,7 @@ instance HasColumnLineage (VerticaStatement ResolvedNames Range) where
                 go k v = maybe (M.singleton k v) fromColumnPlusSet $ M.lookup k old
              in M.union new' old
 
-    getColumnLineage (VerticaSetSchemaStatement (SetSchema _ (RTableName fqtn SchemaMember{..}) schemaName)) =
+    getColumnLineage (TeradataSetSchemaStatement (SetSchema _ (RTableName fqtn SchemaMember{..}) schemaName)) =
         let from = map (qualifyColumnName fqtn) columnsList
             to = map (qualifyColumnName fqtn{tableNameSchema = pure schemaName}) columnsList
          in returnNothing
@@ -428,30 +428,30 @@ instance HasColumnLineage (VerticaStatement ResolvedNames Range) where
                 $ M.insert (Left $ fqtnToFQTN fqtn{tableNameSchema = pure schemaName}) (singleTableSet (getInfo fqtn) $ fqtnToFQTN fqtn)
                 $ M.union (ColumnPlus.emptyLineage from) $ M.fromList $ zip (map (Right . fqcnToFQCN) to) $ map (singleColumnSet (getInfo fqtn) . fqcnToFQCN) from
 
-    getColumnLineage (VerticaMergeStatement merge) = returnNothing $
+    getColumnLineage (TeradataMergeStatement merge) = returnNothing $
         let x:xs = map (snd . columnLineage) (toList $ decomposeMerge merge)
          in foldr (<>) x xs
 
-    getColumnLineage (VerticaUnhandledStatement _) = returnNothing M.empty
+    getColumnLineage (TeradataUnhandledStatement _) = returnNothing M.empty
 
 
 
-resolveVerticaStatement :: VerticaStatement RawNames a -> Resolver (VerticaStatement ResolvedNames) a
-resolveVerticaStatement (VerticaStandardSqlStatement stmt) = VerticaStandardSqlStatement <$> resolveStatement stmt
-resolveVerticaStatement (VerticaCreateProjectionStatement CreateProjection{..}) = do
+resolveTeradataStatement :: TeradataStatement RawNames a -> Resolver (TeradataStatement ResolvedNames) a
+resolveTeradataStatement (TeradataStandardSqlStatement stmt) = TeradataStandardSqlStatement <$> resolveStatement stmt
+resolveTeradataStatement (TeradataCreateProjectionStatement CreateProjection{..}) = do
     WithColumns createProjectionQuery' columns <- resolveQueryWithColumns createProjectionQuery
     bindColumns columns $ do
         createProjectionSegmentation' <- traverse resolveSegmentation createProjectionSegmentation
-        pure $ VerticaCreateProjectionStatement CreateProjection
+        pure $ TeradataCreateProjectionStatement CreateProjection
             { createProjectionQuery = createProjectionQuery'
             , createProjectionSegmentation = createProjectionSegmentation'
             , ..
             }
 
-resolveVerticaStatement (VerticaMultipleRenameStatement stmt) = VerticaMultipleRenameStatement <$> resolveMultipleRename stmt
-resolveVerticaStatement (VerticaSetSchemaStatement stmt) = VerticaSetSchemaStatement <$> resolveSetSchema stmt
+resolveTeradataStatement (TeradataMultipleRenameStatement stmt) = TeradataMultipleRenameStatement <$> resolveMultipleRename stmt
+resolveTeradataStatement (TeradataSetSchemaStatement stmt) = TeradataSetSchemaStatement <$> resolveSetSchema stmt
 
-resolveVerticaStatement (VerticaMergeStatement Merge{..}) = do
+resolveTeradataStatement (TeradataMergeStatement Merge{..}) = do
     mergeTargetTable'@(RTableName tFqtn tSchemaMember) <- resolveTableName mergeTargetTable
     mergeSourceTable'@(RTableName sFqtn sSchemaMember) <- resolveTableName mergeSourceTable
 
@@ -479,7 +479,7 @@ resolveVerticaStatement (VerticaMergeStatement Merge{..}) = do
     let mergeInsertDirectiveColumns' = fmap (fmap resolveColRef) mergeInsertDirectiveColumns
     mergeInsertDirectiveValues' <- bindColumns srcColSet $ mapM (mapM resolveDefaultExpr) mergeInsertDirectiveValues
 
-    pure $ VerticaMergeStatement Merge
+    pure $ TeradataMergeStatement Merge
         { mergeTargetTable = mergeTargetTable'
         , mergeSourceTable = mergeSourceTable'
         , mergeCondition = mergeCondition'
@@ -489,7 +489,7 @@ resolveVerticaStatement (VerticaMergeStatement Merge{..}) = do
         , ..
         }
 
-resolveVerticaStatement (VerticaUnhandledStatement info) = pure $ VerticaUnhandledStatement info
+resolveTeradataStatement (TeradataUnhandledStatement info) = pure $ TeradataUnhandledStatement info
 
 resolveMultipleRename :: MultipleRename RawNames a -> Resolver (MultipleRename ResolvedNames) a
 resolveMultipleRename (MultipleRename info []) = pure $ MultipleRename info []
@@ -518,13 +518,13 @@ resolveSetSchema SetSchema{..} = do
         }
 
 
-instance HasSchemaChange (VerticaStatement ResolvedNames a) where
-    getSchemaChange (VerticaStandardSqlStatement stmt) = getSchemaChange stmt
-    getSchemaChange (VerticaCreateProjectionStatement _) = []
-    getSchemaChange (VerticaMultipleRenameStatement stmt) = getSchemaChange stmt
-    getSchemaChange (VerticaSetSchemaStatement stmt) = getSchemaChange stmt
-    getSchemaChange (VerticaMergeStatement _) = []
-    getSchemaChange (VerticaUnhandledStatement _) = []
+instance HasSchemaChange (TeradataStatement ResolvedNames a) where
+    getSchemaChange (TeradataStandardSqlStatement stmt) = getSchemaChange stmt
+    getSchemaChange (TeradataCreateProjectionStatement _) = []
+    getSchemaChange (TeradataMultipleRenameStatement stmt) = getSchemaChange stmt
+    getSchemaChange (TeradataSetSchemaStatement stmt) = getSchemaChange stmt
+    getSchemaChange (TeradataMergeStatement _) = []
+    getSchemaChange (TeradataUnhandledStatement _) = []
 
 instance HasSchemaChange (MultipleRename ResolvedNames a) where
     getSchemaChange (MultipleRename _ renames) = renames >>= getSchemaChange
@@ -536,20 +536,20 @@ instance HasSchemaChange (SetSchema ResolvedNames a) where
         ]
 
 
-instance (ConstrainSNames ToJSON r a, ToJSON a) => ToJSON (VerticaStatement r a) where
-    toJSON (VerticaStandardSqlStatement stmt) = toJSON stmt
-    toJSON (VerticaCreateProjectionStatement stmt) = toJSON stmt
-    toJSON (VerticaMultipleRenameStatement stmt) = toJSON stmt
-    toJSON (VerticaSetSchemaStatement stmt) = toJSON stmt
-    toJSON (VerticaMergeStatement stmt) = toJSON stmt
+instance (ConstrainSNames ToJSON r a, ToJSON a) => ToJSON (TeradataStatement r a) where
+    toJSON (TeradataStandardSqlStatement stmt) = toJSON stmt
+    toJSON (TeradataCreateProjectionStatement stmt) = toJSON stmt
+    toJSON (TeradataMultipleRenameStatement stmt) = toJSON stmt
+    toJSON (TeradataSetSchemaStatement stmt) = toJSON stmt
+    toJSON (TeradataMergeStatement stmt) = toJSON stmt
 
-    toJSON (VerticaUnhandledStatement info) = JSON.object
-        [ "tag" .= JSON.String "VerticaUnhandledStatement"
+    toJSON (TeradataUnhandledStatement info) = JSON.object
+        [ "tag" .= JSON.String "TeradataUnhandledStatement"
         , "info" .= info
         ]
 
 typeExample :: ()
-typeExample = const () $ toJSON (undefined :: VerticaStatement ResolvedNames Range)
+typeExample = const () $ toJSON (undefined :: TeradataStatement ResolvedNames Range)
 
 instance (ConstrainSNames ToJSON r a, ToJSON a) => ToJSON (CreateProjection r a) where
     toJSON CreateProjection{..} = JSON.object
@@ -590,7 +590,7 @@ instance ToJSON a => ToJSON (AccessRank a) where
 instance (ConstrainSNames ToJSON r a, ToJSON a) => ToJSON (TableInfo r a) where
     toJSON TableInfo{..} = JSON.object
         [ "tag" .= JSON.String "TableInfo"
-        , "dialect" .= JSON.String "Vertica"
+        , "dialect" .= JSON.String "Teradata"
         , "ordering" .= tableInfoOrdering
         , "encoding" .= tableInfoEncoding
         , "segmentation" .= tableInfoSegmentation
@@ -820,13 +820,13 @@ instance HasInfo (Merge r a) where
     type Info (Merge r a) = a
     getInfo Merge{..} = mergeInfo
 
-instance HasTables (VerticaStatement ResolvedNames a) where
-  goTables (VerticaStandardSqlStatement s) = goTables s
-  goTables (VerticaCreateProjectionStatement _) = return ()
-  goTables (VerticaMultipleRenameStatement mr) = goTables mr
-  goTables (VerticaSetSchemaStatement _) = return ()
-  goTables (VerticaMergeStatement merge) = goTables merge
-  goTables (VerticaUnhandledStatement _) = return ()
+instance HasTables (TeradataStatement ResolvedNames a) where
+  goTables (TeradataStandardSqlStatement s) = goTables s
+  goTables (TeradataCreateProjectionStatement _) = return ()
+  goTables (TeradataMultipleRenameStatement mr) = goTables mr
+  goTables (TeradataSetSchemaStatement _) = return ()
+  goTables (TeradataMergeStatement merge) = goTables merge
+  goTables (TeradataUnhandledStatement _) = return ()
 
 instance HasTables (MultipleRename ResolvedNames a) where
   goTables (MultipleRename _ alters) = mapM_ goTables alters
@@ -834,13 +834,13 @@ instance HasTables (MultipleRename ResolvedNames a) where
 instance HasTables (Merge ResolvedNames a) where
   goTables merge = mapM_ goTables $ toList $ decomposeMerge merge
 
-instance HasColumns (VerticaStatement ResolvedNames a) where
-    goColumns (VerticaStandardSqlStatement s) = goColumns s
-    goColumns (VerticaCreateProjectionStatement s) = goColumns s
-    goColumns (VerticaMultipleRenameStatement _) = return ()
-    goColumns (VerticaSetSchemaStatement _) = return ()
-    goColumns (VerticaMergeStatement m) = goColumns m
-    goColumns (VerticaUnhandledStatement _) = return ()
+instance HasColumns (TeradataStatement ResolvedNames a) where
+    goColumns (TeradataStandardSqlStatement s) = goColumns s
+    goColumns (TeradataCreateProjectionStatement s) = goColumns s
+    goColumns (TeradataMultipleRenameStatement _) = return ()
+    goColumns (TeradataSetSchemaStatement _) = return ()
+    goColumns (TeradataMergeStatement m) = goColumns m
+    goColumns (TeradataUnhandledStatement _) = return ()
 
 instance HasColumns (CreateProjection ResolvedNames a) where
     goColumns CreateProjection{..} = bindClause "CREATE" $ do

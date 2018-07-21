@@ -18,11 +18,11 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Parser.Internal where
+module Database.Sql.Teradata.Parser.Internal where
 
 import qualified Text.Parsec as P
 
-import Database.Sql.Vertica.Token
+import Database.Sql.Teradata.Token
 import Database.Sql.Position
 
 type Parser = P.Parsec [(Token, Position, Position)] Integer

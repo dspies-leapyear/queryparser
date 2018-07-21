@@ -21,20 +21,20 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Database.Sql.Vertica.Parser where
+module Database.Sql.Teradata.Parser where
 
 import Database.Sql.Type
 import Database.Sql.Info
 import Database.Sql.Helpers
-import Database.Sql.Vertica.Type
+import Database.Sql.Teradata.Type
 
-import Database.Sql.Vertica.Scanner
-import Database.Sql.Vertica.Parser.Internal
+import Database.Sql.Teradata.Scanner
+import Database.Sql.Teradata.Parser.Internal
 import Database.Sql.Position
 
-import qualified Database.Sql.Vertica.Parser.Token as Tok
-import Database.Sql.Vertica.Parser.IngestionOptions
-import Database.Sql.Vertica.Parser.Shared
+import qualified Database.Sql.Teradata.Parser.Token as Tok
+import Database.Sql.Teradata.Parser.IngestionOptions
+import Database.Sql.Teradata.Parser.Shared
 
 import           Data.Char (isDigit)
 import           Data.Text.Lazy (Text)
@@ -59,44 +59,41 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE (last, fromList)
 import Data.Foldable (fold)
 
-statementParser :: Parser (VerticaStatement RawNames Range)
+statementParser :: Parser (TeradataStatement RawNames Range)
 statementParser = do
     maybeStmt <- optionMaybe $ choice
-        [ try $ VerticaStandardSqlStatement <$> statementP
+        [ try $ TeradataStandardSqlStatement <$> statementP
         , do
               _ <- try $ P.lookAhead createProjectionPrefixP
-              VerticaCreateProjectionStatement <$> createProjectionP
-        , try $ VerticaMultipleRenameStatement <$> multipleRenameP
-        , try $ VerticaSetSchemaStatement <$> setSchemaP
-        , try $ VerticaUnhandledStatement <$> renameProjectionP
+              TeradataCreateProjectionStatement <$> createProjectionP
+        , try $ TeradataMultipleRenameStatement <$> multipleRenameP
+        , try $ TeradataSetSchemaStatement <$> setSchemaP
+        , try $ TeradataUnhandledStatement <$> renameProjectionP
         , do
               _ <- try $ P.lookAhead alterResourcePoolPrefixP
-              VerticaUnhandledStatement <$> alterResourcePoolP
+              TeradataUnhandledStatement <$> alterResourcePoolP
         , do
               _ <- try $ P.lookAhead createResourcePoolPrefixP
-              VerticaUnhandledStatement <$> createResourcePoolP
+              TeradataUnhandledStatement <$> createResourcePoolP
         , do
               _ <- try $ P.lookAhead dropResourcePoolPrefixP
-              VerticaUnhandledStatement <$> dropResourcePoolP
+              TeradataUnhandledStatement <$> dropResourcePoolP
         , do
               _ <- try $ P.lookAhead createFunctionPrefixP
-              VerticaUnhandledStatement <$> createFunctionP
-        , VerticaUnhandledStatement <$> alterTableAddConstraintP
-        , VerticaUnhandledStatement <$> exportToStdoutP
+              TeradataUnhandledStatement <$> createFunctionP
+        , TeradataUnhandledStatement <$> alterTableAddConstraintP
+        , TeradataUnhandledStatement <$> exportToStdoutP
         , do
               _ <- try $ P.lookAhead setSessionPrefixP
-              VerticaUnhandledStatement <$> setSessionP
-        , VerticaUnhandledStatement <$> setTimeZoneP
-        , VerticaUnhandledStatement <$> connectP
-        , VerticaUnhandledStatement <$> disconnectP
-        , VerticaUnhandledStatement <$> createAccessPolicyP
-        , VerticaUnhandledStatement <$> copyFromP
-        , VerticaUnhandledStatement <$> showP
-        , VerticaMergeStatement <$> mergeP
+              TeradataUnhandledStatement <$> setSessionP
+        , TeradataUnhandledStatement <$> setTimeZoneP
+        , TeradataUnhandledStatement <$> createAccessPolicyP
+        , TeradataUnhandledStatement <$> showP
+        , TeradataMergeStatement <$> mergeP
         ]
     case maybeStmt of
         Just stmt -> terminator >> return stmt
-        Nothing -> VerticaStandardSqlStatement <$> emptyStatementP
+        Nothing -> TeradataStandardSqlStatement <$> emptyStatementP
   where
     terminator = (Tok.semicolonP <|> eof) -- normal statements may be terminated by `;` or eof
     emptyStatementP = EmptyStmt <$> Tok.semicolonP  -- but we don't allow eof here. `;` is the
@@ -104,24 +101,24 @@ statementParser = do
 
 
 -- | parse consumes a statement, or fails
-parse :: Text -> Either P.ParseError (VerticaStatement RawNames Range)
+parse :: Text -> Either P.ParseError (TeradataStatement RawNames Range)
 parse = P.runParser statementParser 0 "-"  . tokenize
 
 -- | parseAll consumes all input as a single statement, or fails
-parseAll :: Text -> Either P.ParseError (VerticaStatement RawNames Range)
+parseAll :: Text -> Either P.ParseError (TeradataStatement RawNames Range)
 parseAll = P.runParser (statementParser <* P.eof) 0 "-"  . tokenize
 
 -- | parseMany consumes multiple statements, or fails
-parseMany :: Text -> Either P.ParseError [VerticaStatement RawNames Range]
+parseMany :: Text -> Either P.ParseError [TeradataStatement RawNames Range]
 parseMany = P.runParser (P.many1 statementParser) 0 "-"  . tokenize
 
 -- | parseManyAll consumes all input multiple statements, or fails
-parseManyAll :: Text -> Either P.ParseError [VerticaStatement RawNames Range]
+parseManyAll :: Text -> Either P.ParseError [TeradataStatement RawNames Range]
 parseManyAll text = P.runParser (P.many1 statementParser <* P.eof) 0 "-"  . tokenize $ text
 
 -- | parseManyEithers consumes all input as multiple (statements or failures)
 -- it should never fail
-parseManyEithers :: Text -> Either P.ParseError [Either (Unparsed Range) (VerticaStatement RawNames Range)]
+parseManyEithers :: Text -> Either P.ParseError [Either (Unparsed Range) (TeradataStatement RawNames Range)]
 parseManyEithers text = P.runParser parser 0 "-"  . tokenize $ text
   where
     parser = do
@@ -144,7 +141,7 @@ parseManyEithers text = P.runParser parser 0 "-"  . tokenize $ text
 optionBool :: Parser a -> Parser Bool
 optionBool p = option False $ p >> pure True
 
-statementP :: Parser (Statement Vertica RawNames Range)
+statementP :: Parser (Statement Teradata RawNames Range)
 statementP = choice
     [ InsertStmt <$> insertP
     , DeleteStmt <$> deleteP
@@ -333,7 +330,7 @@ distinctP = choice $
     ]
 
 
-explainP :: Parser (Statement Vertica RawNames Range)
+explainP :: Parser (Statement Teradata RawNames Range)
 explainP = do
     s <- Tok.explainP
     stmt <- choice
@@ -396,14 +393,14 @@ createSchemaP = do
     return $ CreateSchema{..}
 
 
-createTableColumnsP :: Parser (TableDefinition Vertica RawNames Range)
+createTableColumnsP :: Parser (TableDefinition Teradata RawNames Range)
 createTableColumnsP = do
     s <- Tok.openP
     c:cs <- columnOrConstraintP `sepBy1` Tok.commaP
     e <- Tok.closeP
     pure $ TableColumns (s <> e) (c:|cs)
   where
-    columnOrConstraintP :: Parser (ColumnOrConstraint Vertica RawNames Range)
+    columnOrConstraintP :: Parser (ColumnOrConstraint Teradata RawNames Range)
     columnOrConstraintP = choice
         [ try $ ColumnOrConstraintColumn <$> columnDefinitionP
         , ColumnOrConstraintConstraint <$> constraintDefinitionP
@@ -463,7 +460,7 @@ createExternalTablePrefixP = do
     return (s, External r)
 
 
-createExternalTableP :: Parser (CreateTable Vertica RawNames Range)
+createExternalTableP :: Parser (CreateTable Teradata RawNames Range)
 createExternalTableP = do
     (s, createTableExternality) <- createExternalTablePrefixP
     let createTablePersistence = Persistent
@@ -589,7 +586,7 @@ createViewP = do
         pure $ QColumnName r None name
 
 
-createTableP :: Parser (CreateTable Vertica RawNames Range)
+createTableP :: Parser (CreateTable Teradata RawNames Range)
 createTableP = do
     s <- Tok.createP
 
@@ -1028,10 +1025,10 @@ makeExprAlias (FunctionExpr info (QFunctionName _ _ name) _ _ _ _ _) = makeColum
 makeExprAlias (SubqueryExpr info _) = makeDummyAlias info
 makeExprAlias (ArrayExpr info _) = makeDummyAlias info  -- might actually be "array", but I'm not sure how to check
 makeExprAlias (ExistsExpr info _) = makeDummyAlias info
-makeExprAlias (FieldAccessExpr _ _ _) = fail "Unsupported struct access in Vertica: unused datatype in this dialect"
-makeExprAlias (ArrayAccessExpr _ _ _) = fail "Unsupported array access in Vertica: unused datatype in this dialect"
+makeExprAlias (FieldAccessExpr _ _ _) = fail "Unsupported struct access in Teradata: unused datatype in this dialect"
+makeExprAlias (ArrayAccessExpr _ _ _) = fail "Unsupported array access in Teradata: unused datatype in this dialect"
 makeExprAlias (TypeCastExpr _ _ expr _) = makeExprAlias expr
-makeExprAlias (VariableSubstitutionExpr _) = fail "Unsupported variable substitution in Vertica: unused datatype in this dialect"
+makeExprAlias (VariableSubstitutionExpr _) = fail "Unsupported variable substitution in Teradata: unused datatype in this dialect"
 
 
 aliasP :: Expr RawNames Range -> Parser (ColumnAlias Range)
@@ -2125,36 +2122,6 @@ setTimeZoneP = do
     return $ s <> e
 
 
-connectP :: Parser Range
-connectP = do
-    s <- Tok.connectP
-    _ <- Tok.toP
-    _ <- Tok.verticaP
-    _ <- Tok.databaseNameP
-    _ <- Tok.userP
-    _ <- Tok.userNameP
-    _ <- Tok.passwordP
-    e <- snd <$> Tok.stringP <|> snd <$> starsP
-    e' <- option e $ do
-        _ <- Tok.onP
-        _ <- Tok.stringP
-        _ <- Tok.commaP
-        snd <$> Tok.numberP
-    pure $ s <> e'
-  where
-    starsP = do
-        rs <- P.many1 Tok.starP
-        let text = TL.take (fromIntegral $ length rs) $ TL.repeat '*'
-            r = head rs <> last rs
-        pure (text, r)
-
-
-disconnectP :: Parser Range
-disconnectP = do
-    s <- Tok.disconnectP
-    (_, e) <- Tok.databaseNameP
-    pure $ s <> e
-
 createAccessPolicyP :: Parser Range
 createAccessPolicyP = do
     s <- Tok.createP
@@ -2168,93 +2135,6 @@ createAccessPolicyP = do
     _ <- exprP
     e <- choice [ Tok.enableP, Tok.disableP ]
     pure $ s <> e
-
-
-copyFromP :: Parser Range
-copyFromP = do
-    s <- Tok.copyP
-    e <- getInfo <$> tableNameP
-
-    e' <- consumeOrderedOptions e $
-        [ ingestionColumnListP (getInfo <$> exprP)
-        , ingestionColumnOptionP
-        , fromP -- you need **either** a FROM or a SOURCE clause, but let's not be fussy
-        , fileStorageFormatP
-        ]
-    e'' <- consumeUnorderedOptions e' $
-        [ do
-            _ <- optional Tok.withP
-            choice [ fileSourceP
-                   , fileFilterP
-                   , fileParserP
-                   ]
-        , delimiterAsP
-        , trailingNullColsP
-        , nullAsP
-        , escapeFormatP
-        , enclosedByP
-        , recordTerminatorP
-        , try $ skipRecordsP
-        , try $ skipBytesP
-        , trimByteP
-        , rejectMaxP
-        , rejectedDataOnNodeP
-        , exceptionsOnNodeP
-        , Tok.enforceLengthP
-        , errorToleranceP
-        , abortOnErrorP
-        , optional Tok.storageP >> loadMethodP
-        , streamNameP
-        , noCommitP
-        ]
-
-    return $ s <> e''
-
-  where
-    onNodeP :: Range -> Parser Range
-    onNodeP r = do
-        s <- option r $ choice
-                 [ try $ Tok.onP >> snd <$> Tok.nodeNameP
-                 , Tok.onP >> Tok.anyP >> Tok.nodeP
-                 ]
-        e <- option s compressionP
-        return $ s <> e
-
-    fromP :: Parser Range
-    fromP = do
-        outerS <- Tok.fromP
-        outerE <- choice $
-            [ do
-                s <- Tok.stdinP
-                e <- option s compressionP
-                return $ s <> e
-            , do
-                (_, s) <- Tok.stringP
-                e <- last <$> ((onNodeP s) `sepBy1` Tok.commaP)
-                return $ s <> e
-            , do
-                s <- Tok.localP
-                e' <- choice [ do
-                                  e <- Tok.stdinP
-                                  option e compressionP
-                            , let pathToDataP = do
-                                      e <- snd <$> Tok.stringP
-                                      option e compressionP
-                               in last <$> (pathToDataP `sepBy1` Tok.commaP)
-                            ]
-                return $ s <> e'
-            , do
-                s <- Tok.verticaP
-                _ <- Tok.databaseNameP
-                _ <- Tok.dotP
-                e <- getInfo <$> tableNameP
-                e' <- option e $ do
-                    _ <- Tok.openP
-                    _ <- Tok.columnNameP `sepBy1` Tok.commaP
-                    Tok.closeP
-                return $ s <> e'
-            ]
-        return $ outerS <> outerE
 
 
 showP :: Parser Range

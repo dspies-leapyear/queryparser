@@ -18,7 +18,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Token where
+module Database.Sql.Teradata.Token where
 
 import           Data.Text.Lazy (Text)
 import           Data.ByteString.Lazy (ByteString)

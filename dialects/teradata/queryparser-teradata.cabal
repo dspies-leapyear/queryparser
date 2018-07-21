@@ -1,4 +1,4 @@
-name:                queryparser-vertica
+name:                queryparser-teradata
 
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
@@ -9,11 +9,11 @@ name:                queryparser-vertica
 version:             0.2.0.1
 
 -- A short (one-line) description of the package.
-synopsis:            Parsing for Vertica SQL queries
+synopsis:            Parsing for Teradata SQL queries
 
 -- A longer description of the package.
 description:
-            A library for parsing Vertica SQL queries into analyzable ASTs.
+            A library for parsing Teradata SQL queries into analyzable ASTs.
             .
             This library is to be used with the queryparser library, which
             provides the common type definitions and analyses across the
@@ -31,7 +31,7 @@ author:              Heli Wang, David Thomas, Matt Halverson
 
 -- An email address to which users can send suggestions, bug reports, and
 -- patches.
-maintainer:          heli@uber.com
+maintainer:          david.thomas@leapyear.io
 
 -- A copyright notice.
 -- copyright:
@@ -55,14 +55,14 @@ flag development {
 
 library
   -- Modules exported by the library.
-  exposed-modules:     Database.Sql.Vertica.Parser
-                     , Database.Sql.Vertica.Parser.Token
-                     , Database.Sql.Vertica.Scanner
-                     , Database.Sql.Vertica.Token
-                     , Database.Sql.Vertica.Type
-                     , Database.Sql.Vertica.Parser.Internal
-                     , Database.Sql.Vertica.Parser.IngestionOptions
-                     , Database.Sql.Vertica.Parser.Shared
+  exposed-modules:     Database.Sql.Teradata.Parser
+                     , Database.Sql.Teradata.Parser.Token
+                     , Database.Sql.Teradata.Scanner
+                     , Database.Sql.Teradata.Token
+                     , Database.Sql.Teradata.Type
+                     , Database.Sql.Teradata.Parser.Internal
+                     , Database.Sql.Teradata.Parser.IngestionOptions
+                     , Database.Sql.Teradata.Parser.Shared
 
   -- Modules included in this library but not exported.
   -- other-modules:
