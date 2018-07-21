@@ -18,14 +18,14 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Parser.Test where
+module Database.Sql.Teradata.Parser.Test where
 
 import Test.HUnit
 import Test.HUnit.Ticket
 import Database.Sql.Type
 import Database.Sql.Position
-import Database.Sql.Vertica.Parser
-import Database.Sql.Vertica.Type
+import Database.Sql.Teradata.Parser
+import Database.Sql.Teradata.Type
 
 import           Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as TL
@@ -304,10 +304,6 @@ testParser = test
         , "CREATE RESOURCE POOL some_pool RUNTIMECAP '5 minutes';"
         , "DROP RESOURCE POOL some_pool;"
         , "ALTER RESOURCE POOL some_pool PRIORITY 5;"
-        , "CONNECT TO VERTICA ExampleDB USER dbadmin PASSWORD 'Password123' ON 'VerticaHost01',5433;"
-        , "CONNECT TO VERTICA ExampleDB USER dbadmin PASSWORD ******** ON 'VerticaHost01', 5433;"
-        , "CONNECT TO VERTICA ExampleDB USER dbadmin PASSWORD********;"
-        , "DISCONNECT ExampleDB;"
         , "SET TIME ZONE TO DEFAULT;"
         , "SET TIME ZONE TO 'PST8PDT';"
         , "SET TIME ZONE TO 'Europe/Rome';"
@@ -352,44 +348,6 @@ testParser = test
         , "CREATE OR REPLACE PARSER BasicIntegerParser AS LANGUAGE 'C++' NAME 'BasicIntegerParserFactory' LIBRARY BasicIntegerParserLib;"
         , "CREATE OR REPLACE SOURCE curl AS LANGUAGE 'C++' NAME 'CurlSourceFactory' LIBRARY curllib;"
         , "SHOW search_path;"
-        -- EXPORT
-        , "EXPORT TO STDOUT FROM foo (a, b);"  -- back half of COPY FROM VERTICA, not actually runnable but appears in logs
-        , TL.unlines
-          [ "COPY public.foo (\"a\", \"b\")"
-          , "FROM VERTICA VerticaDB.public.bar (\"c\", \"d\")"
-          , "DIRECT"
-          , ";"
-          ]
-        , TL.unlines
-          [ "COPY public.foo (\"a\", \"b\")"
-          , "FROM VERTICA VerticaDB.public.bar (\"c\", \"d\")"
-          , "AUTO"
-          , "STREAM NAME 'foobar'"
-          , "NO COMMIT"
-          , ";"
-          ]
-        , "COPY public.foo (\"a\", \"b\") FROM VERTICA VerticaDB.public.bar (\"c\", \"d\") TRICKLE;"
-        , "COPY public.foo (\"a\", \"b\") FROM VERTICA VerticaDB.public.bar (\"c\", \"d\") AUTO;"
-        , "COPY public.foo (a, b AS func(arg1, arg2 || '.' || arg3)) SOURCE HDFS(url='');"
-        , TL.unlines  -- same options, different order
-          [ "COPY public.foo(a, t as '2016-10-09T17-13-14.594')"
-          , "REJECTMAX 4096"
-          , "SOURCE HDFS(url='http://host:port/webhdfs/v1/path/*')"
-          , "ENCLOSED BY '\"'"
-          , "DIRECT"
-          , "SKIP 1"
-          , "DELIMITER E'\037'"
-          , "null as 'null'"
-          , "RECORD TERMINATOR E'\036\012'"
-          , ";"
-          ]
-        , TL.unlines
-          [ "COPY public.foo (a, t as '2016-10-14T07-00-23.582')"
-          , "SOURCE HDFS(url='http://host:port/webhdfs/v1/path/*')"
-          , "DELIMITER E'\\037'"
-          , "RECORD TERMINATOR E'\\036\\012'"
-          , ";"
-          ]
         , "SELECT * FROM foo INNER JOIN bar USING (a);"
         , "SELECT datediff(qq, 'a', 'b');"
         , "SELECT datediff('qq', 'a', 'b');"
@@ -518,11 +476,11 @@ testParser = test
     , "Parse exactly" ~:
 
         [ parse ";" ~?= Right
-            (VerticaStandardSqlStatement (EmptyStmt (Range (Position 1 0 0) (Position 1 1 1))))
+            (TeradataStandardSqlStatement (EmptyStmt (Range (Position 1 0 0) (Position 1 1 1))))
 
         , parse "SELECT 1" ~?= Right
           -- semicolon is optional
-            ( VerticaStandardSqlStatement
+            ( TeradataStandardSqlStatement
                 ( QueryStmt
                     ( QuerySelect (Range (Position 1 0 0) (Position 1 8 8))
                         Select
@@ -556,7 +514,7 @@ testParser = test
 
 
         , parse "SELECT foo FROM bar INNER JOIN baz ON 'true';" ~?= Right
-            ( VerticaStandardSqlStatement
+            ( TeradataStandardSqlStatement
                 ( QueryStmt
                     ( QuerySelect (Range (Position 1 0 0) (Position 1 44 44))
                         Select
@@ -618,7 +576,7 @@ testParser = test
                 )
             )
         , parse "SELECT 1 LIMIT 1;" ~?= Right
-            ( VerticaStandardSqlStatement
+            ( TeradataStandardSqlStatement
                 ( QueryStmt
                     ( QueryLimit
                         ( Range (Position 1 0 0) (Position 1 16 16) )
@@ -664,7 +622,7 @@ testParser = test
             )
 
         , parse "(SELECT 1 LIMIT 0) UNION (SELECT 2 LIMIT 1) LIMIT 1;" ~?= Right
-            ( VerticaStandardSqlStatement
+            ( TeradataStandardSqlStatement
                 ( QueryStmt
                     ( QueryLimit
                         ( Range (Position 1 19 19) (Position 1 51 51) )
@@ -762,7 +720,7 @@ testParser = test
             )
 
         , parse "SELECT a, rank() OVER (PARTITION BY a ORDER BY 1) FROM foo ORDER BY 1;" ~?= Right
-          ( VerticaStandardSqlStatement
+          ( TeradataStandardSqlStatement
             ( QueryStmt
               ( QueryOrder
                 ( Range (Position 1 0 0) (Position 1 69 69) )
@@ -842,7 +800,7 @@ testParser = test
                     })))))
 
         , parse "SELECT created_at AT TIMEZONE 'PST' > now();" ~?= Right
-          ( VerticaStandardSqlStatement
+          ( TeradataStandardSqlStatement
             ( QueryStmt
               ( QuerySelect
                 ( Range (Position 1 0 0) (Position 1 37 37) )

@@ -18,16 +18,16 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Parser.IngestionOptions where
+module Database.Sql.Teradata.Parser.IngestionOptions where
 
 import Database.Sql.Info
 import Database.Sql.Helpers
 
-import Database.Sql.Vertica.Parser.Internal
+import Database.Sql.Teradata.Parser.Internal
 import Database.Sql.Position
 
-import qualified Database.Sql.Vertica.Parser.Token as Tok
-import Database.Sql.Vertica.Parser.Shared
+import qualified Database.Sql.Teradata.Parser.Token as Tok
+import Database.Sql.Teradata.Parser.Shared
 
 import           Text.Parsec ( choice
                              , option, optional

@@ -18,12 +18,12 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-module Database.Sql.Vertica.Parser.Token where
+module Database.Sql.Teradata.Parser.Token where
 
 
-import Database.Sql.Vertica.Token
-import Database.Sql.Vertica.Type
-import Database.Sql.Vertica.Parser.Internal
+import Database.Sql.Teradata.Token
+import Database.Sql.Teradata.Type
+import Database.Sql.Teradata.Parser.Internal
 
 import Database.Sql.Position
 
@@ -942,9 +942,6 @@ varBinaryP = ("varbinary", ) <$> keywordP "varbinary"
 
 varCharP :: Parser (Text, Range)
 varCharP = ("varchar", ) <$> keywordP "varchar"
-
-verticaP :: Parser Range
-verticaP = keywordP "vertica"
 
 viewP :: Parser Range
 viewP = keywordP "view"

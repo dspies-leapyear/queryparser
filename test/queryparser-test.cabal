@@ -51,6 +51,8 @@ library
                      , Database.Sql.Hive.Parser.Test
                      , Database.Sql.Presto.Scanner.Test
                      , Database.Sql.Presto.Parser.Test
+                     , Database.Sql.Teradata.Scanner.Test
+                     , Database.Sql.Teradata.Parser.Test
                      , Database.Sql.Util.Eval.Test
                      , Database.Sql.Util.Joins.Test
                      , Database.Sql.Util.Json.Test
@@ -69,6 +71,7 @@ library
                      , queryparser-vertica
                      , queryparser-hive
                      , queryparser-presto
+                     , queryparser-teradata
                      , aeson >= 0.8
                      , containers
                      , hashable
