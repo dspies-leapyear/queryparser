@@ -26,6 +26,8 @@ import qualified Database.Sql.Hive.Parser.Test
 import qualified Database.Sql.Hive.Scanner.Test
 import qualified Database.Sql.Presto.Parser.Test
 import qualified Database.Sql.Presto.Scanner.Test
+import qualified Database.Sql.Teradata.Parser.Test
+import qualified Database.Sql.Teradata.Scanner.Test
 import qualified Database.Sql.Info.Test
 import qualified Database.Sql.Position.Test
 import qualified Database.Sql.Pretty.Test
@@ -67,6 +69,8 @@ hunitTests = Test.hUnitTestToTests $ HU.TestList
     , Database.Sql.Hive.Parser.Test.tests
     , Database.Sql.Presto.Scanner.Test.tests
     , Database.Sql.Presto.Parser.Test.tests
+    , Database.Sql.Teradata.Scanner.Test.tests
+    , Database.Sql.Teradata.Parser.Test.tests
     ]
 
 quickCheckProperties :: [TestFramework.Test]
