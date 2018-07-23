@@ -803,7 +803,7 @@ segmentedP :: Parser Range
 segmentedP = keywordP "segmented"
 
 selectP :: Parser Range
-selectP = keywordP "select"
+selectP = keywordP "select" P.<|> keywordP "sel"
 
 semicolonP :: Parser Range
 semicolonP = symbolP ";"

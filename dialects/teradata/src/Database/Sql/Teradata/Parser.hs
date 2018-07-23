@@ -20,6 +20,7 @@
 
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -fwarn-missing-fields #-}
 
 module Database.Sql.Teradata.Parser where
 
@@ -40,7 +41,6 @@ import           Data.Char (isDigit)
 import           Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import qualified Data.List as L
 
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Monoid (Endo (..))
@@ -58,6 +58,7 @@ import Data.Semigroup (Semigroup (..), sconcat)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE (last, fromList)
 import Data.Foldable (fold)
+import Data.Traversable (forM)
 
 statementParser :: Parser (TeradataStatement RawNames Range)
 statementParser = do
@@ -847,6 +848,29 @@ integerP = do
         [(n', "")] -> pure (n', e)
         _ -> fail $ unwords ["unable to parse", show n, "as integer"]
 
+optionalAnyOrder :: Monoid a => [Parser a] -> Parser a
+optionalAnyOrder parsers =
+  optionMaybe (choice $ zipWith (fmap . (,)) [0..] parsers) >>= \case
+    Nothing -> pure mempty
+    Just (n, m) -> mappend m <$> optionalAnyOrder (elide n parsers)
+  where
+    elide :: Int -> [a] -> [a]
+    elide n xs =
+      let (ys, _:zs) = splitAt n xs
+       in ys ++ zs
+
+
+setFrom :: SelectFrom RawNames Range -> Endo (Select RawNames Range)
+setFrom from = Endo $ \ Select{..} -> Select{selectInfo = selectInfo <> getInfo from, selectFrom = Just from, ..}
+
+setWhere :: SelectWhere RawNames Range -> Endo (Select RawNames Range)
+setWhere where_ = Endo $ \ Select{..} -> Select{selectInfo = selectInfo <> getInfo where_, selectWhere = Just where_, ..}
+
+setGroup :: SelectGroup RawNames Range -> Endo (Select RawNames Range)
+setGroup group = Endo $ \ Select{..} -> Select{selectInfo = selectInfo <> getInfo group, selectGroup = Just group, ..}
+
+setHaving :: SelectHaving RawNames Range -> Endo (Select RawNames Range)
+setHaving having = Endo $ \ Select{..} -> Select{selectInfo = selectInfo <> getInfo having, selectHaving = Just having, ..}
 
 selectP :: Parser (Select RawNames Range)
 selectP = do
@@ -859,23 +883,23 @@ selectP = do
         let r' = foldl1 (<>) $ map getInfo selections
         return $ SelectColumns r' selections
 
-    selectFrom <- optionMaybe fromP
-    selectWhere <- optionMaybe whereP
-    selectTimeseries <- optionMaybe timeseriesP
-    selectGroup <- optionMaybe groupP
-    selectHaving <- optionMaybe havingP
-    selectNamedWindow <- optionMaybe namedWindowP
+    Endo populateClauses <- optionalAnyOrder
+      [ setFrom <$> fromP
+      , setWhere <$> whereP
+      , setGroup <$> groupP
+      , setHaving <$> havingP
+      ]
 
-    let (Just selectInfo) = sconcat $ Just r :|
-            [ Just $ getInfo selectCols
-            , getInfo <$> selectFrom
-            , getInfo <$> selectWhere
-            , getInfo <$> selectTimeseries
-            , getInfo <$> selectGroup
-            , getInfo <$> selectHaving
-            , getInfo <$> selectNamedWindow
-            ]
-    return Select{..}
+    return $ populateClauses Select
+        { selectInfo = r <> getInfo selectCols
+        , selectFrom = Nothing
+        , selectWhere = Nothing
+        , selectTimeseries = Nothing
+        , selectGroup = Nothing
+        , selectHaving = Nothing
+        , selectNamedWindow = Nothing
+        , ..
+        }
 
   where
     fromP = do
@@ -889,29 +913,6 @@ selectP = do
         r <- Tok.whereP
         condition <- exprP
         return $ SelectWhere (r <> getInfo condition) condition
-
-    timeseriesP = do
-        s <- Tok.timeseriesP
-
-        selectTimeseriesSliceName <- columnAliasP
-
-        _ <- Tok.asP
-
-        selectTimeseriesInterval <- do
-            (c, r) <- Tok.stringP
-            pure $ StringConstant r c
-
-        _ <- Tok.overP
-        _ <- Tok.openP
-        selectTimeseriesPartition <- optionMaybe partitionP
-        selectTimeseriesOrder <- do
-            _ <- Tok.orderP
-            _ <- Tok.byP
-            exprP
-        e <- Tok.closeP
-
-        let selectTimeseriesInfo = s <> e
-        pure $ SelectTimeseries {..}
 
     toGroupingElement :: PositionOrExpr RawNames Range -> GroupingElement RawNames Range
     toGroupingElement posOrExpr = GroupingElementExpr (getInfo posOrExpr) posOrExpr
@@ -932,34 +933,6 @@ selectP = do
         let r' = foldl (<>) r $ fmap getInfo conditions
         return $ SelectHaving r' conditions
 
-    namedWindowP =
-      do
-        r <- Tok.windowP
-        windows <- (flip sepBy1) Tok.commaP $ do
-          name <- windowNameP
-          _ <- Tok.asP
-          _ <- Tok.openP
-          window <- choice
-              [ do
-                  partition@(Just p) <- Just <$> partitionP
-                  order <- option [] orderInWindowClauseP
-                  let orderInfos = map getInfo order -- better way?
-                      info = L.foldl' (<>) (getInfo p) orderInfos
-                  return $ Left $ WindowExpr info partition order Nothing
-              , do
-                  inherit <- windowNameP
-                  order <- option [] orderInWindowClauseP
-                  let orderInfo = map getInfo order -- better way?
-                      info = L.foldl' (<>) (getInfo inherit) orderInfo
-                  return $ Right $ PartialWindowExpr info inherit Nothing order Nothing
-              ]
-          e <- Tok.closeP
-          let info = getInfo name <> e
-          return $ case window of
-            Left w -> NamedWindowExpr info name w
-            Right pw -> NamedPartialWindowExpr info name pw
-        let info = L.foldl' (<>) r $ fmap getInfo windows
-        return $ SelectNamedWindow info windows
 
 handlePositionalReferences :: Expr RawNames Range -> PositionOrExpr RawNames Range
 handlePositionalReferences e = case e of
@@ -1206,6 +1179,10 @@ functionExprP = choice
                 , do
                     isDistinct <- distinctP
                     (isDistinct,) . (:[]) <$> exprP
+
+                , try $ do
+                    subquery <- queryP
+                    pure (notDistinct, [SubqueryExpr (getInfo subquery) subquery])
 
                 , (notDistinct,) <$> exprP `sepBy` Tok.commaP
                 ]
@@ -1697,6 +1674,19 @@ orExprP :: Parser (Expr RawNames Range)
 orExprP = andExprP `chainl1` (Tok.orP >>= \ r -> return (BinOpExpr r "OR"))
 
 
+tablishAliasesP :: Parser (OptionalTablishAliases Range, Range)
+tablishAliasesP = do
+    optional Tok.asP
+    (name, r) <- Tok.tableNameP
+    t <- makeTableAlias r name
+    (cs, r') <- option (Nothing, r) $ do
+        _ <- Tok.openP
+        names <- Tok.columnNameP `sepBy1` Tok.commaP
+        cs <- forM names $ \ (c, cr) -> makeColumnAlias cr c
+        r' <- Tok.closeP
+        pure (Just cs, r')
+    pure (maybe (TablishAliasesT t) (TablishAliasesTC t) cs, r <> r')
+
 singleTableP :: Parser (Tablish RawNames Range)
 singleTableP = try subqueryP <|> try tableP <|> parenthesizedJoinP
   where
@@ -1704,27 +1694,14 @@ singleTableP = try subqueryP <|> try tableP <|> parenthesizedJoinP
         r <- Tok.openP
         query <- queryP
         _ <- Tok.closeP
-        optional Tok.asP
-        (name, r') <- Tok.tableNameP
-
-        alias <- makeTableAlias r' name
-        return $ TablishSubQuery (r <> r')
-                                 (TablishAliasesT alias)
-                                 query
+        (alias, r') <- tablishAliasesP
+        return $ TablishSubQuery (r <> r') alias query
 
     tableP = do
         name <- tableNameP
-        maybe_alias <- optionMaybe $ do
-            optional Tok.asP
-            (alias, r) <- Tok.tableNameP
-            makeTableAlias r alias
-
-        let r = case maybe_alias of
-                Nothing -> getInfo name
-                Just alias -> getInfo alias <> getInfo name
-            aliases = maybe TablishAliasesNone TablishAliasesT maybe_alias
-
-        return $ TablishTable r aliases name
+        let r = getInfo name
+        (aliases, r') <- option (TablishAliasesNone, r) tablishAliasesP
+        return $ TablishTable (r <> r') aliases name
 
     parenthesizedJoinP = do
         tablish <- P.between Tok.openP Tok.closeP $ do
