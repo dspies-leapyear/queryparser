@@ -61,16 +61,44 @@ testTokenizer =
                                        , Position 1 7 7 )]
              ],
 
-      "Double quotes are untouched"
+      "Multiquote"
+      ~: test[ tokenize "\"foobar\"" ~?= [( TokWord True "foobar"
+                                          , Position 1 0 0
+                                          , Position 1 8 8 )]
+
+             , tokenize "\"foo\"bar" ~?= [( TokWord True "foo"
+                                          , Position 1 0 0
+                                          , Position 1 5 5 )
+                                         ,( TokWord False "bar"
+                                          , Position 1 5 5
+                                          , Position 1 8 8 )]
+
+             , tokenize "\"foo\"\"bar\"" ~?= [( TokWord True "foo\"bar"
+                                              , Position 1 0 0
+                                              , Position 1 10 10 )]
+
+             , tokenize "\"foo\"\"\"bar" ~?= [( TokWord True "foo\""
+                                              , Position 1 0 0
+                                              , Position 1 7 7 )
+                                             ,( TokWord False "bar"
+                                              , Position 1 7 7
+                                              , Position 1 10 10 )]
+
+             , tokenize "\"foo\"\"\"\"bar\"" ~?= [( TokWord True "foo\"\"bar"
+                                                  , Position 1 0 0
+                                                  , Position 1 12 12 )]
+             ],
+
+      "Double quotes are lowercased, marked as quoted"
       ~: test[ tokenize "\"potato\"" ~?= [( TokWord True "potato"
                                           , Position 1 0 0
                                           , Position 1 8 8 )]
 
-             , tokenize "\"Potato\"" ~?= [( TokWord True "Potato"
+             , tokenize "\"Potato\"" ~?= [( TokWord True "potato"
                                           , Position 1 0 0
                                           , Position 1 8 8 )]
 
-             , tokenize "\"POTATO\"" ~?= [( TokWord True "POTATO"
+             , tokenize "\"POTATO\"" ~?= [( TokWord True "potato"
                                           , Position 1 0 0
                                           , Position 1 8 8 )]
              ],
@@ -148,7 +176,7 @@ testTokenizer =
                      )
                    ]
 
-             , tokenize "fo\"o b\"ar"
+             , tokenize "\"foo bar\""
                ~?= [( TokWord True "foo bar", initPos, Position 1 9 9 )]
              ],
 
@@ -161,11 +189,6 @@ testTokenizer =
                      , initPos
                      , Position 1 18 18 )]
             ],
-
-      "Double quotes can be arbitrarily combined"
-      ~: test[ tokenize "Ab\"CdEf\"Gh\"Ij\"K"
-               ~?= [( TokWord True "abCdEfghIjk", initPos, Position 1 15 15 )]
-             ],
 
       "Quotes get continued if there is a newline"
       ~: test[ tokenize "'foo'\n 'bar' 'baz'"
